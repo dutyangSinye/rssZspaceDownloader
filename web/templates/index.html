@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M-TEAM 控制台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{--bg:#f4efe8;--card:rgba(255,250,243,.82);--card2:rgba(255,255,255,.72);--text:#1b1a17;--muted:#6d675f;--line:rgba(35,24,14,.1);--brand:#d95d39;--brand2:#ef8b61;--accent:#156d64;--danger:#d64f4f;--warn:#db9a17;--shadow:0 20px 60px rgba(53,34,12,.12);--r1:28px;--r2:20px;--r3:14px}
+        *{box-sizing:border-box}body{margin:0;font-family:"Noto Sans SC",sans-serif;background:radial-gradient(circle at 15% 0%,rgba(217,93,57,.14),transparent 22%),radial-gradient(circle at 90% 0%,rgba(21,109,100,.1),transparent 18%),linear-gradient(180deg,#f8f3eb,#efe7dc);color:var(--text)}
+        button,input{font:inherit}a{text-decoration:none;color:inherit}
+        .shell{width:min(1380px,calc(100vw - 24px));margin:12px auto 32px}
+        .hero,.card{background:var(--card);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.8);box-shadow:var(--shadow)}
+        .hero{border-radius:34px;padding:26px;background:radial-gradient(circle at top left,rgba(217,93,57,.15),transparent 30%),radial-gradient(circle at top right,rgba(21,109,100,.13),transparent 26%),linear-gradient(135deg,#fff9f1,#f5ede5)}
+        .hero-grid{display:grid;grid-template-columns:1.5fr .9fr;gap:20px}.eyebrow{display:inline-flex;gap:8px;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.72);font-size:13px;color:var(--muted)}
+        h1{margin:18px 0 12px;font:700 clamp(34px,6vw,64px)/.95 "Space Grotesk","Noto Sans SC",sans-serif;letter-spacing:-.05em}.accent{color:var(--brand)}.copy{max-width:760px;color:var(--muted);line-height:1.8}
+        .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}.stat,.mini{background:rgba(255,255,255,.68);border:1px solid rgba(35,24,14,.08);border-radius:18px;padding:16px}.stat b{display:block;margin-top:10px;font:700 26px "Space Grotesk",sans-serif}
+        .mini h3,.title{margin:0;font-family:"Space Grotesk","Noto Sans SC",sans-serif}.mini p,.sub{margin:6px 0 0;color:var(--muted);line-height:1.7;font-size:14px}
+        .pills{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}.pill{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border-radius:999px;background:rgba(27,26,23,.05);font-size:13px}.dot{width:10px;height:10px;border-radius:50%;background:var(--warn)}.dot.connected{background:var(--accent)}.dot.error{background:var(--danger)}
+        .tabs{display:flex;gap:12px;overflow:auto;padding:16px 2px 2px;margin:10px 0 18px}.tabs::-webkit-scrollbar{display:none}.tab-btn{border:none;background:rgba(255,255,255,.76);color:var(--muted);border-radius:999px;padding:12px 18px;white-space:nowrap;cursor:pointer}.tab-btn.active{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;box-shadow:0 16px 32px rgba(217,93,57,.22)}
+        .panel{display:none}.panel.active{display:block}.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}.stack{display:grid;gap:18px}
+        .card{border-radius:var(--r1);padding:22px}.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.title{font-size:20px;letter-spacing:-.03em}
+        .badge{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border-radius:999px;background:rgba(255,255,255,.76);border:1px solid rgba(35,24,14,.06);font-size:12px}
+        .actions{display:flex;flex-wrap:wrap;gap:12px}.btn{border:none;border-radius:14px;padding:12px 18px;color:#fff;background:var(--brand);cursor:pointer;font-weight:600;box-shadow:0 12px 24px rgba(217,93,57,.18)}.btn.secondary{background:#23211d;box-shadow:0 12px 24px rgba(35,33,29,.16)}.btn.accent{background:var(--accent);box-shadow:0 12px 24px rgba(21,109,100,.16)}.btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
+        .input{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.72);outline:none}.input:focus{border-color:rgba(217,93,57,.45);box-shadow:0 0 0 4px rgba(217,93,57,.08)}
+        .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.mode{padding:18px;border-radius:20px;border:1px solid transparent;background:rgba(255,255,255,.64);cursor:pointer}.mode.selected{border-color:rgba(21,109,100,.34);background:linear-gradient(180deg,rgba(21,109,100,.08),rgba(255,255,255,.72))}.mode b{display:block;margin-top:10px}.mode span{display:block;margin-top:6px;color:var(--muted);font-size:13px;line-height:1.6}
+        .progress{display:none;margin-top:16px}.meta{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:13px;margin-bottom:8px}.track{height:10px;background:rgba(27,26,23,.08);border-radius:999px;overflow:hidden}.fill{height:100%;width:0;background:linear-gradient(135deg,var(--brand),var(--brand2));transition:width .25s ease}
+        .steps{display:none;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}.step{padding:12px;border-radius:14px;text-align:center;background:rgba(255,255,255,.62);color:var(--muted);font-size:13px}.step.active{background:rgba(217,93,57,.1);color:var(--brand);border:1px solid rgba(217,93,57,.24)}.step.done{background:rgba(21,109,100,.1);color:var(--accent);border:1px solid rgba(21,109,100,.2)}
+        .list{display:grid;gap:10px;max-height:460px;overflow:auto;padding-right:4px}.item{padding:16px;border-radius:16px;background:rgba(255,255,255,.68);border:1px solid rgba(35,24,14,.07)}.split{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.item h4{margin:0;font-size:15px;line-height:1.7;word-break:break-word}.item .meta2{margin-top:8px;color:var(--muted);font-size:12px}.item .sum{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.7}
+        .mini-btn{border:none;border-radius:10px;padding:10px 12px;background:var(--accent);color:#fff;cursor:pointer;flex-shrink:0}.code,.article{background:#1f1d19;color:#efe8dd;border-radius:20px;padding:18px;min-height:240px;max-height:560px;overflow:auto}.line{padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08);font:13px/1.6 "Space Grotesk","Noto Sans SC",sans-serif;color:#d2c8bb}.line:last-child{border-bottom:none}.article{white-space:pre-wrap;line-height:1.85;font-size:14px}.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+        @media (max-width:1100px){.hero-grid,.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
+        @media (max-width:760px){.shell{width:min(100vw - 16px,100%)}.hero{padding:18px;border-radius:24px}.stats,.modes,.steps{grid-template-columns:1fr}.card{padding:16px;border-radius:20px}.actions,.split{flex-direction:column}.btn,.mini-btn{width:100%}.head{flex-direction:column}.tab-btn{padding:11px 16px}}
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <section class="hero">
+            <div class="hero-grid">
+                <div>
+                    <div class="eyebrow">M-TEAM / AI / Publishing Console</div>
+                    <h1>更像产品的 <span class="accent">控制台</span></h1>
+                    <p class="copy">统一处理下载、资讯生成、文章优化和头条发布。界面做了现代化重构，手机上也能直接操作，不再是堆按钮的后台页。</p>
+                    <div class="stats">
+                        <div class="stat">Transmission<b id="metricTransmission">-</b></div>
+                        <div class="stat">AI Model<b id="metricModel">-</b></div>
+                        <div class="stat">History<b id="metricHistory">0</b></div>
+                    </div>
+                </div>
+                <div class="stack">
+                    <div class="mini">
+                        <h3>系统状态</h3>
+                        <p>关键状态集中展示，减少来回切页和盲点操作。</p>
+                        <div class="pills">
+                            <div class="pill"><span class="dot" id="heroTransmissionDot"></span><span id="heroTransmissionText">Transmission 检查中</span></div>
+                            <div class="pill"><span class="dot" id="heroAiDot"></span><span id="heroAiText">AI 检查中</span></div>
+                        </div>
+                    </div>
+                    <div class="mini">
+                        <h3>移动端优化</h3>
+                        <p>标签横向滚动、卡片纵向堆叠、操作按钮全宽，适合手机直接点。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="mteam">M-TEAM 下载</button>
+            <button class="tab-btn" data-tab="task">资讯任务</button>
+            <button class="tab-btn" data-tab="news">采集资讯</button>
+            <button class="tab-btn" data-tab="article">文章内容</button>
+            <button class="tab-btn" data-tab="history">历史记录</button>
+        </div>
+
+        <section class="panel active" id="tab-mteam">
+            <div class="grid">
+                <div class="stack">
+                    <div class="card">
+                        <div class="head">
+                            <div>
+                                <h2 class="title">下载控制</h2>
+                                <p class="sub">选择分类，预览 RSS，或直接触发下载任务。</p>
+                            </div>
+                            <div class="badge"><span class="dot" id="trStatusDot"></span><span id="trStatusText">Transmission 检查中</span></div>
+                        </div>
+                        <div class="modes">
+                            <div class="mode selected" data-mode="tv">TV<b>电视剧</b><span>支持关键字筛选，适合连续剧追更。</span></div>
+                            <div class="mode" data-mode="movie">4K<b>电影</b><span>适合直接拉取电影 RSS 任务。</span></div>
+                            <div class="mode" data-mode="adult" hidden>18+<b>成人</b><span>保留原始接口能力，样式统一。</span></div>
+                        </div>
+                        <div id="tvKeywordsWrap" style="margin-top:16px;">
+                            <input class="input" id="tvKeywords" type="text" placeholder="输入电视剧关键字，用空格分隔">
+                        </div>
+                        <div class="actions" style="margin-top:16px;">
+                            <button class="btn accent" onclick="previewRSS()">预览 RSS</button>
+                            <button class="btn" onclick="startDownload()">开始下载</button>
+                            <button class="btn secondary" onclick="refreshStatus()">刷新状态</button>
+                        </div>
+                        <div class="progress" id="downloadProgress">
+                            <div class="meta"><span id="progressText">等待中</span><span id="progressPercent">0%</span></div>
+                            <div class="track"><div class="fill" id="progressFill"></div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="stack">
+                    <div class="card">
+                        <div class="head">
+                            <div><h2 class="title">RSS 预览</h2><p class="sub">最近抓到的候选种子。</p></div>
+                            <div class="badge" id="rssCount">0 条</div>
+                        </div>
+                        <div class="list" id="rssList"><div class="empty">点击“预览 RSS”后显示内容</div></div>
+                    </div>
+                    <div class="card">
+                        <div class="head"><div><h2 class="title">下载历史</h2><p class="sub">显示最近任务结果。</p></div></div>
+                        <div class="list" id="mteamHistoryList"><div class="empty">暂无下载历史</div></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" id="tab-task">
+            <div class="grid">
+                <div class="stack">
+                    <div class="card">
+                        <div class="head">
+                            <div><h2 class="title">资讯工作流</h2><p class="sub">采集、分析、写作、补图和发布统一控制。</p></div>
+                            <div class="badge"><span class="dot" id="taskStatusDot"></span><span id="taskStatusText">等待开始</span></div>
+                        </div>
+                        <div class="actions">
+                            <button class="btn accent" id="startBtn" onclick="startTask()">启动整条任务</button>
+                            <button class="btn secondary" onclick="resetTask()">重置状态</button>
+                            <button class="btn" onclick="optimizeArticle()">优化文章</button>
+                            <button class="btn secondary" onclick="regenerateArticle()">重新生成</button>
+                            <button class="btn secondary" onclick="previewArticle()">预览文章</button>
+                            <button class="btn" onclick="publishArticle()">发布到头条</button>
+                        </div>
+                        <div class="progress" id="taskProgressWrap">
+                            <div class="meta"><span id="taskProgressStep">准备中</span><span id="taskProgressPercent">0%</span></div>
+                            <div class="track"><div class="fill" id="taskProgressFill"></div></div>
+                        </div>
+                        <div class="steps" id="taskSteps">
+                            <div class="step" id="step-collect">采集</div>
+                            <div class="step" id="step-analyze">分析</div>
+                            <div class="step" id="step-write">写作</div>
+                            <div class="step" id="step-evaluate">评估</div>
+                            <div class="step" id="step-images">配图</div>
+                            <div class="step" id="step-done">完成</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="stack">
+                    <div class="card">
+                        <div class="head"><div><h2 class="title">任务日志</h2><p class="sub">后端状态和执行日志实时显示。</p></div></div>
+                        <div class="code" id="logContainer"><div class="line">等待任务启动</div></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" id="tab-news">
+            <div class="card">
+                <div class="head"><div><h2 class="title">采集到的资讯</h2><p class="sub">用来快速判断抓取质量。</p></div></div>
+                <div class="list" id="newsList"><div class="empty">执行资讯任务后显示内容</div></div>
+            </div>
+        </section>
+
+        <section class="panel" id="tab-article">
+            <div class="grid">
+                <div class="card">
+                    <div class="head"><div><h2 class="title">文章正文</h2><p class="sub">原始生成结果。</p></div></div>
+                    <div class="article" id="articleContent">等待生成文章</div>
+                </div>
+                <div class="card">
+                    <div class="head"><div><h2 class="title">带配图版本</h2><p class="sub">插入配图后的最终内容。</p></div></div>
+                    <div class="article" id="articleWithImages">等待生成文章</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" id="tab-history">
+            <div class="card">
+                <div class="head"><div><h2 class="title">文章历史</h2><p class="sub">最近保存的资讯文章记录。</p></div></div>
+                <div class="list" id="articleHistoryList"><div class="empty">暂无文章历史</div></div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        let currentMode = "tv", currentDownloadTaskId = null, taskPollingInterval = null, currentArticle = "", currentArticleWithImages = "";
+        const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)];
+        const esc = (v) => String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+        const escJs = (v) => String(v ?? "").replaceAll("\\","\\\\").replaceAll("'","\\'");
+        const json = (u,o={}) => fetch(u,o).then(r=>r.json());
+
+        function setDot(el, state){ el.classList.remove("connected","error"); if(state) el.classList.add(state); }
+        function switchTab(tab, btn){ $$(".tab-btn").forEach(b=>b.classList.remove("active")); $$(".panel").forEach(p=>p.classList.remove("active")); btn.classList.add("active"); $(`#tab-${tab}`).classList.add("active"); if(tab==="history") loadArticleHistory(); if(tab==="news") loadNews(); if(tab==="article") loadArticle(); }
+        function selectMode(mode, card){ currentMode = mode; $$(".mode").forEach(c=>c.classList.remove("selected")); card.classList.add("selected"); $("#tvKeywordsWrap").style.display = mode === "tv" ? "block" : "none"; }
+        $$(".tab-btn").forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab, btn));
+        $$(".mode").forEach(card=>card.onclick=()=>selectMode(card.dataset.mode, card));
+
+        async function refreshStatus(){
+            try{
+                const d = await json("/api/status");
+                setDot($("#trStatusDot"), d.transmission_connected ? "connected" : "error");
+                $("#trStatusText").textContent = d.transmission_connected ? `Transmission 已连接 · ${d.transmission_host}` : "Transmission 连接失败";
+                setDot($("#heroTransmissionDot"), d.transmission_connected ? "connected" : "error");
+                $("#heroTransmissionText").textContent = d.transmission_connected ? "下载器已在线" : "下载器不可用";
+                setDot($("#heroAiDot"), d.ai_ready ? "connected" : "error");
+                $("#heroAiText").textContent = d.ai_ready ? `${d.ai_model} 可用` : (d.ai_error || "AI 未就绪");
+                $("#metricTransmission").textContent = d.transmission_connected ? "Online" : "Error";
+                $("#metricModel").textContent = d.ai_model || "-";
+                $("#metricHistory").textContent = d.history_count ?? 0;
+                loadMteamHistory();
+            }catch(e){
+                setDot($("#trStatusDot"), "error"); setDot($("#heroTransmissionDot"), "error"); setDot($("#heroAiDot"), "error");
+                $("#trStatusText").textContent = "状态获取失败"; $("#heroTransmissionText").textContent = "接口异常"; $("#heroAiText").textContent = "接口异常";
+            }
+        }
+
+        async function previewRSS(){
+            const d = await json("/api/preview",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:currentMode})});
+            if(!d.success) return alert(d.message || "RSS 获取失败");
+            $("#rssCount").textContent = `${d.count} 条`;
+            $("#rssList").innerHTML = !d.items.length ? '<div class="empty">当前分类没有可展示内容</div>' : d.items.map(item=>`
+                <div class="item split">
+                    <div><h4>${esc(item.title)}</h4><div class="meta2">${esc(item.chinese_name || "无中文名")}</div></div>
+                    <button class="mini-btn" onclick="downloadOne('${escJs(item.enclosure_url)}','${escJs(item.title)}')">下载</button>
+                </div>`).join("");
+        }
+
+        async function startDownload(){
+            const d = await json("/api/download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:currentMode,keywords:$("#tvKeywords").value || ""})});
+            if(!d.success) return alert(d.message || "任务启动失败");
+            currentDownloadTaskId = d.task_id; $("#downloadProgress").style.display = "block"; pollDownloadProgress();
+        }
+
+        async function pollDownloadProgress(){
+            if(!currentDownloadTaskId) return;
+            const d = await json(`/api/progress/${currentDownloadTaskId}`);
+            if(!d.success) return;
+            const p = d.progress, percent = p.current && p.total ? Math.round(p.current / p.total * 100) : 0;
+            $("#progressText").textContent = p.message || p.status || "处理中"; $("#progressPercent").textContent = `${percent}%`; $("#progressFill").style.width = `${percent}%`;
+            if(p.status === "completed" || p.status === "error"){ currentDownloadTaskId = null; refreshStatus(); return; }
+            setTimeout(pollDownloadProgress, 1000);
+        }
+
+        async function downloadOne(url,title){ const d = await json("/api/download-one",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,title,mode:currentMode})}); alert(d.message || (d.success ? "添加成功" : "添加失败")); }
+
+        async function loadMteamHistory(){
+            const d = await json("/api/history?limit=10"), list = d.history || [];
+            $("#mteamHistoryList").innerHTML = !list.length ? '<div class="empty">暂无下载历史</div>' : list.map(item=>`
+                <div class="item">
+                    <h4>${esc(item.mode_name || item.mode || "未知任务")}</h4>
+                    <div class="meta2">${esc(item.time || "-")}</div>
+                    <div class="meta2">新增 ${item.statistics?.added_count ?? item.statistics?.added ?? 0} · 跳过 ${item.statistics?.skipped_count ?? item.statistics?.skipped ?? 0} · 失败 ${item.statistics?.failed_count ?? item.statistics?.failed ?? 0}</div>
+                </div>`).join("");
+        }
+
+        function resetSteps(){ ["collect","analyze","write","evaluate","images","done"].forEach(step=>{ const el = $(`#step-${step}`); el.classList.remove("active","done"); }); }
+        async function startTask(){ const d = await json("/api/news/start",{method:"POST"}); if(!d.success) return alert(d.message || "任务启动失败"); $("#startBtn").disabled = true; $("#taskProgressWrap").style.display = "block"; $("#taskSteps").style.display = "grid"; if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); }
+        async function resetTask(){ await json("/api/news/reset",{method:"POST"}); if(taskPollingInterval){ clearInterval(taskPollingInterval); taskPollingInterval = null; } $("#startBtn").disabled = false; $("#taskProgressWrap").style.display = "none"; $("#taskSteps").style.display = "none"; $("#taskStatusText").textContent = "等待开始"; setDot($("#taskStatusDot"), ""); $("#logContainer").innerHTML = '<div class="line">状态已重置</div>'; $("#newsList").innerHTML = '<div class="empty">执行资讯任务后显示内容</div>'; $("#articleContent").textContent = "等待生成文章"; $("#articleWithImages").textContent = "等待生成文章"; currentArticle = ""; currentArticleWithImages = ""; resetSteps(); }
+
+        async function pollTaskStatus(){
+            const d = await json("/api/news/status"), s = d.status || "idle";
+            const m = {idle:["等待开始",0,""],collecting:["采集中",15,"collect"],analyzing:["分析中",32,"analyze"],writing:["写作中",52,"write"],evaluating:["评估中",70,"evaluate"],embedding_images:["配图中",86,"images"],optimizing:["优化中",65,"write"],publishing:["发布中",92,"done"],completed:["已完成",100,"done"],error:["执行出错",0,""]};
+            const [text,percent,active] = m[s] || [s,0,""]; $("#taskStatusText").textContent = text; setDot($("#taskStatusDot"), s==="completed" ? "connected" : s==="error" ? "error" : ""); $("#taskProgressStep").textContent = text; $("#taskProgressPercent").textContent = `${percent}%`; $("#taskProgressFill").style.width = `${percent}%`;
+            resetSteps(); const steps = ["collect","analyze","write","evaluate","images","done"], idx = steps.indexOf(active); if(s==="completed"){ steps.forEach(step=>$(`#step-${step}`).classList.add("done")); } else if(idx >= 0){ steps.forEach((step,i)=>{ if(i < idx) $(`#step-${step}`).classList.add("done"); if(i===idx) $(`#step-${step}`).classList.add("active"); }); }
+            $("#logContainer").innerHTML = (d.logs || []).length ? d.logs.map(line=>`<div class="line">${esc(line)}</div>`).join("") : '<div class="line">等待任务日志</div>'; $("#logContainer").scrollTop = $("#logContainer").scrollHeight;
+            await loadNews(); await loadArticle();
+            if(s==="completed" || s==="error"){ $("#startBtn").disabled = false; if(taskPollingInterval){ clearInterval(taskPollingInterval); taskPollingInterval = null; } }
+        }
+
+        async function loadNews(){ const d = await json("/api/news"), list = d.news || []; $("#newsList").innerHTML = !list.length ? '<div class="empty">执行资讯任务后显示内容</div>' : list.map(item=>`<div class="item"><h4>${esc(item.title || "")}</h4><div class="meta2">${esc(item.source || "未知来源")}</div><div class="sum">${esc(item.summary || "")}</div></div>`).join(""); }
+        async function loadArticle(){ const d = await json("/api/news"); currentArticle = d.article || ""; currentArticleWithImages = d.article_with_images || ""; $("#articleContent").textContent = currentArticle || "等待生成文章"; $("#articleWithImages").textContent = currentArticleWithImages || "等待生成文章"; }
+        async function optimizeArticle(){ if(!currentArticle) return alert("请先生成文章"); const d = await json("/api/news/optimize",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({article:currentArticle})}); if(!d.success) return alert(d.message || "优化失败"); if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); }
+        async function regenerateArticle(){ const d = await json("/api/news/regenerate",{method:"POST"}); if(!d.success) return alert(d.message || "重生成失败"); if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); }
+        async function publishArticle(){ const content = currentArticleWithImages || currentArticle; if(!content) return alert("请先生成文章"); let title = ""; for(const line of content.split("\n")){ if(line.startsWith("标题：") || line.startsWith("标题:")){ title = line.replace("标题：","").replace("标题:","").trim(); break; } } if(!title) title = "今日建筑机器人行业资讯"; if(!window.confirm(`确认发布？\n\n${title}`)) return; const d = await json("/api/news/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,content,auto_publish:true})}); if(!d.success) return alert(d.message || "发布失败"); if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); alert(d.message || "发布任务已启动"); }
+        function previewArticle(){ const content = currentArticleWithImages || currentArticle; if(!content) return alert("请先生成文章"); const win = window.open("", "_blank"); win.document.write(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>文章预览</title><style>body{font-family:"Noto Sans SC",sans-serif;max-width:860px;margin:0 auto;padding:24px;background:#f7f2eb;color:#1d1c19;line-height:1.9}.wrap{background:#fffdf9;border-radius:24px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.08)}.meta{color:#756f67;margin-bottom:18px;font-size:14px}img{max-width:100%;border-radius:18px}</style></head><body><div class="wrap"><div class="meta">生成时间：${new Date().toLocaleString("zh-CN")}</div>${content.replace(/\n/g,"<br>")}</div></body></html>`); }
+        async function loadArticleHistory(){ const d = await json("/api/news/history"), list = d.history || []; $("#articleHistoryList").innerHTML = !list.length ? '<div class="empty">暂无文章历史</div>' : list.map(item=>`<div class="item"><h4>${esc(item.time || "未记录时间")}</h4><div class="meta2">资讯 ${item.news_count || 0} 条 · ${item.article ? "已生成正文" : "无正文"} · ${esc(item.publish_result || "未发布")}</div></div>`).join(""); }
+
+        refreshStatus(); loadArticle(); pollTaskStatus(); setInterval(refreshStatus, 30000);
+    </script>
+</body>
+</html>
