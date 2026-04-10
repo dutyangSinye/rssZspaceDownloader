@@ -1,4 +1,4 @@
-# M-TEAM 下载服务模块
+# PT RSS 下载服务模块
 from .download_service import DownloadManager, RSSService, TransmissionClient, RSSItem
 from .rss_parser import RSSParser
 

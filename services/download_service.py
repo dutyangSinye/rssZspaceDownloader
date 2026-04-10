@@ -1,4 +1,4 @@
-# M-TEAM 下载服务层
+# PT RSS 下载服务层
 import logging
 import time
 from threading import Lock

@@ -1,4 +1,4 @@
-﻿# M-TEAM Downloader 配置文件
+﻿# PT RSS Downloader 配置文件
 # 从环境变量或 .env 文件加载配置
 
 import os
@@ -32,6 +32,7 @@ class Settings:
     OPENAI_REASONING_EFFORT: str = "medium"
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:7b"
+    OLLAMA_API_KEY: str = ""
     AI_MAX_TOKENS: int = 4000
     AI_TEMPERATURE: float = 0.7
 
@@ -92,6 +93,7 @@ class Settings:
         cls.OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", cls.OPENAI_REASONING_EFFORT)
         cls.OLLAMA_URL = os.getenv("OLLAMA_URL", cls.OLLAMA_URL)
         cls.OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", cls.OLLAMA_MODEL)
+        cls.OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", cls.OLLAMA_API_KEY)
         cls.AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", cls.AI_MAX_TOKENS))
         cls.AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", cls.AI_TEMPERATURE))
 
@@ -146,4 +148,5 @@ class Settings:
 
 
 Settings.load()
+
 

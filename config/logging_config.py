@@ -5,7 +5,7 @@ from logging.handlers import RotatingFileHandler
 from config.settings import Settings
 
 
-def setup_logging(name: str = "mteam_downloader") -> logging.Logger:
+def setup_logging(name: str = "pt_rss_downloader") -> logging.Logger:
     """配置日志系统"""
     logger = logging.getLogger(name)
 

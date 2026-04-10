@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>M-TEAM 控制台</title>
+    <title>PT RSS 控制台</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -25,11 +25,13 @@
         .badge{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border-radius:999px;background:rgba(255,255,255,.76);border:1px solid rgba(35,24,14,.06);font-size:12px}
         .actions{display:flex;flex-wrap:wrap;gap:12px}.btn{border:none;border-radius:14px;padding:12px 18px;color:#fff;background:var(--brand);cursor:pointer;font-weight:600;box-shadow:0 12px 24px rgba(217,93,57,.18)}.btn.secondary{background:#23211d;box-shadow:0 12px 24px rgba(35,33,29,.16)}.btn.accent{background:var(--accent);box-shadow:0 12px 24px rgba(21,109,100,.16)}.btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
         .input{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.72);outline:none}.input:focus{border-color:rgba(217,93,57,.45);box-shadow:0 0 0 4px rgba(217,93,57,.08)}
+        .checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.check{display:flex;gap:8px;align-items:center;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.68);border:1px solid var(--line);font-size:14px;color:var(--muted)}.check input{width:16px;height:16px}
         .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.mode{padding:18px;border-radius:20px;border:1px solid transparent;background:rgba(255,255,255,.64);cursor:pointer}.mode.selected{border-color:rgba(21,109,100,.34);background:linear-gradient(180deg,rgba(21,109,100,.08),rgba(255,255,255,.72))}.mode b{display:block;margin-top:10px}.mode span{display:block;margin-top:6px;color:var(--muted);font-size:13px;line-height:1.6}
         .progress{display:none;margin-top:16px}.meta{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:13px;margin-bottom:8px}.track{height:10px;background:rgba(27,26,23,.08);border-radius:999px;overflow:hidden}.fill{height:100%;width:0;background:linear-gradient(135deg,var(--brand),var(--brand2));transition:width .25s ease}
         .steps{display:none;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}.step{padding:12px;border-radius:14px;text-align:center;background:rgba(255,255,255,.62);color:var(--muted);font-size:13px}.step.active{background:rgba(217,93,57,.1);color:var(--brand);border:1px solid rgba(217,93,57,.24)}.step.done{background:rgba(21,109,100,.1);color:var(--accent);border:1px solid rgba(21,109,100,.2)}
         .list{display:grid;gap:10px;max-height:460px;overflow:auto;padding-right:4px}.item{padding:16px;border-radius:16px;background:rgba(255,255,255,.68);border:1px solid rgba(35,24,14,.07)}.split{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.item h4{margin:0;font-size:15px;line-height:1.7;word-break:break-word}.item .meta2{margin-top:8px;color:var(--muted);font-size:12px}.item .sum{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.7}
         .mini-btn{border:none;border-radius:10px;padding:10px 12px;background:var(--accent);color:#fff;cursor:pointer;flex-shrink:0}.code,.article{background:#1f1d19;color:#efe8dd;border-radius:20px;padding:18px;min-height:240px;max-height:560px;overflow:auto}.line{padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08);font:13px/1.6 "Space Grotesk","Noto Sans SC",sans-serif;color:#d2c8bb}.line:last-child{border-bottom:none}.article{white-space:pre-wrap;line-height:1.85;font-size:14px}.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+        .article-render{white-space:normal}.img-tools{display:flex;justify-content:flex-end;gap:8px;margin:8px 0 18px}.swap-btn{border:none;border-radius:10px;padding:8px 12px;background:var(--brand);color:#fff;cursor:pointer;font-size:12px}.swap-btn.secondary{background:#23211d}
         @media (max-width:1100px){.hero-grid,.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
         @media (max-width:760px){.shell{width:min(100vw - 16px,100%)}.hero{padding:18px;border-radius:24px}.stats,.modes,.steps{grid-template-columns:1fr}.card{padding:16px;border-radius:20px}.actions,.split{flex-direction:column}.btn,.mini-btn{width:100%}.head{flex-direction:column}.tab-btn{padding:11px 16px}}
     </style>
@@ -39,7 +41,7 @@
         <section class="hero">
             <div class="hero-grid">
                 <div>
-                    <div class="eyebrow">M-TEAM / AI / Publishing Console</div>
+                    <div class="eyebrow">PT RSS / AI / Publishing Console</div>
                     <h1>更像产品的 <span class="accent">控制台</span></h1>
                     <p class="copy">统一处理下载、资讯生成、文章优化和头条发布。界面做了现代化重构，手机上也能直接操作，不再是堆按钮的后台页。</p>
                     <div class="stats">
@@ -66,14 +68,14 @@
         </section>
 
         <div class="tabs">
-            <button class="tab-btn active" data-tab="mteam">M-TEAM 下载</button>
+            <button class="tab-btn active" data-tab="ptrss">PT RSS 下载</button>
             <button class="tab-btn" data-tab="task">资讯任务</button>
             <button class="tab-btn" data-tab="news">采集资讯</button>
             <button class="tab-btn" data-tab="article">文章内容</button>
             <button class="tab-btn" data-tab="history">历史记录</button>
         </div>
 
-        <section class="panel active" id="tab-mteam">
+        <section class="panel active" id="tab-ptrss">
             <div class="grid">
                 <div class="stack">
                     <div class="card">
@@ -113,7 +115,7 @@
                     </div>
                     <div class="card">
                         <div class="head"><div><h2 class="title">下载历史</h2><p class="sub">显示最近任务结果。</p></div></div>
-                        <div class="list" id="mteamHistoryList"><div class="empty">暂无下载历史</div></div>
+                        <div class="list" id="ptRssHistoryList"><div class="empty">暂无下载历史</div></div>
                     </div>
                 </div>
             </div>
@@ -126,6 +128,11 @@
                         <div class="head">
                             <div><h2 class="title">资讯工作流</h2><p class="sub">采集、分析、写作、补图和发布统一控制。</p></div>
                             <div class="badge"><span class="dot" id="taskStatusDot"></span><span id="taskStatusText">等待开始</span></div>
+                        </div>
+                        <div style="margin-bottom:14px;">
+                            <div class="sub" style="margin-bottom:8px;">采集前先选择资讯类型</div>
+                            <div class="checks" id="newsCategoryChecks"></div>
+                            <div class="sub" id="currentNewsCategory" style="margin-top:8px;">当前类型：未选择</div>
                         </div>
                         <div class="actions">
                             <button class="btn accent" id="startBtn" onclick="startTask()">启动整条任务</button>
@@ -188,6 +195,7 @@
 
     <script>
         let currentMode = "tv", currentDownloadTaskId = null, taskPollingInterval = null, currentArticle = "", currentArticleWithImages = "";
+        let newsCategories = [], currentNewsCategories = ["ai"], currentNewsCategoryLabel = "人工智能";
         const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)];
         const esc = (v) => String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
         const escJs = (v) => String(v ?? "").replaceAll("\\","\\\\").replaceAll("'","\\'");
@@ -211,7 +219,7 @@
                 $("#metricTransmission").textContent = d.transmission_connected ? "Online" : "Error";
                 $("#metricModel").textContent = d.ai_model || "-";
                 $("#metricHistory").textContent = d.history_count ?? 0;
-                loadMteamHistory();
+                loadPtRssHistory();
             }catch(e){
                 setDot($("#trStatusDot"), "error"); setDot($("#heroTransmissionDot"), "error"); setDot($("#heroAiDot"), "error");
                 $("#trStatusText").textContent = "状态获取失败"; $("#heroTransmissionText").textContent = "接口异常"; $("#heroAiText").textContent = "接口异常";
@@ -247,9 +255,9 @@
 
         async function downloadOne(url,title){ const d = await json("/api/download-one",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,title,mode:currentMode})}); alert(d.message || (d.success ? "添加成功" : "添加失败")); }
 
-        async function loadMteamHistory(){
+        async function loadPtRssHistory(){
             const d = await json("/api/history?limit=10"), list = d.history || [];
-            $("#mteamHistoryList").innerHTML = !list.length ? '<div class="empty">暂无下载历史</div>' : list.map(item=>`
+            $("#ptRssHistoryList").innerHTML = !list.length ? '<div class="empty">暂无下载历史</div>' : list.map(item=>`
                 <div class="item">
                     <h4>${esc(item.mode_name || item.mode || "未知任务")}</h4>
                     <div class="meta2">${esc(item.time || "-")}</div>
@@ -257,14 +265,48 @@
                 </div>`).join("");
         }
 
+        async function initNewsCategories(){
+            const d = await json("/api/news/categories");
+            if(!d.success) return;
+            newsCategories = d.categories || [];
+            currentNewsCategories = Array.isArray(d.default) ? d.default : [d.default || (newsCategories[0]?.id || "ai")];
+            renderNewsCategoryChecks();
+            syncCurrentCategoryLabel();
+        }
+
+        function renderNewsCategoryChecks(){
+            const box = $("#newsCategoryChecks");
+            box.innerHTML = newsCategories.map(c=>`
+                <label class="check">
+                    <input type="checkbox" value="${esc(c.id)}" ${currentNewsCategories.includes(c.id) ? "checked" : ""}>
+                    <span>${esc(c.label)}</span>
+                </label>
+            `).join("");
+            box.querySelectorAll("input[type='checkbox']").forEach(input => {
+                input.addEventListener("change", () => {
+                    const selected = [...box.querySelectorAll("input[type='checkbox']:checked")].map(el => el.value);
+                    currentNewsCategories = selected.length ? selected : [newsCategories[0]?.id || "ai"];
+                    syncCurrentCategoryLabel();
+                });
+            });
+        }
+
+        function syncCurrentCategoryLabel(){
+            const labels = currentNewsCategories.map(id => newsCategories.find(c => c.id === id)?.label).filter(Boolean);
+            currentNewsCategoryLabel = labels.length ? labels.join("、") : "资讯";
+            $("#currentNewsCategory").textContent = `当前类型：${currentNewsCategoryLabel}`;
+        }
+
         function resetSteps(){ ["collect","analyze","write","evaluate","images","done"].forEach(step=>{ const el = $(`#step-${step}`); el.classList.remove("active","done"); }); }
-        async function startTask(){ const d = await json("/api/news/start",{method:"POST"}); if(!d.success) return alert(d.message || "任务启动失败"); $("#startBtn").disabled = true; $("#taskProgressWrap").style.display = "block"; $("#taskSteps").style.display = "grid"; if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); }
+        async function startTask(){ const d = await json("/api/news/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({categories:currentNewsCategories})}); if(!d.success) return alert(d.message || "任务启动失败"); currentNewsCategories = d.news_categories || currentNewsCategories; currentNewsCategoryLabel = d.news_category_label || currentNewsCategoryLabel; renderNewsCategoryChecks(); syncCurrentCategoryLabel(); $("#startBtn").disabled = true; $("#taskProgressWrap").style.display = "block"; $("#taskSteps").style.display = "grid"; if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); }
         async function resetTask(){ await json("/api/news/reset",{method:"POST"}); if(taskPollingInterval){ clearInterval(taskPollingInterval); taskPollingInterval = null; } $("#startBtn").disabled = false; $("#taskProgressWrap").style.display = "none"; $("#taskSteps").style.display = "none"; $("#taskStatusText").textContent = "等待开始"; setDot($("#taskStatusDot"), ""); $("#logContainer").innerHTML = '<div class="line">状态已重置</div>'; $("#newsList").innerHTML = '<div class="empty">执行资讯任务后显示内容</div>'; $("#articleContent").textContent = "等待生成文章"; $("#articleWithImages").textContent = "等待生成文章"; currentArticle = ""; currentArticleWithImages = ""; resetSteps(); }
 
         async function pollTaskStatus(){
             const d = await json("/api/news/status"), s = d.status || "idle";
             const m = {idle:["等待开始",0,""],collecting:["采集中",15,"collect"],analyzing:["分析中",32,"analyze"],writing:["写作中",52,"write"],evaluating:["评估中",70,"evaluate"],embedding_images:["配图中",86,"images"],optimizing:["优化中",65,"write"],publishing:["发布中",92,"done"],completed:["已完成",100,"done"],error:["执行出错",0,""]};
             const [text,percent,active] = m[s] || [s,0,""]; $("#taskStatusText").textContent = text; setDot($("#taskStatusDot"), s==="completed" ? "connected" : s==="error" ? "error" : ""); $("#taskProgressStep").textContent = text; $("#taskProgressPercent").textContent = `${percent}%`; $("#taskProgressFill").style.width = `${percent}%`;
+            if(Array.isArray(d.news_categories) && d.news_categories.length){ currentNewsCategories = d.news_categories; renderNewsCategoryChecks(); }
+            if(d.news_category_label){ currentNewsCategoryLabel = d.news_category_label; $("#currentNewsCategory").textContent = `当前类型：${currentNewsCategoryLabel}`; }
             resetSteps(); const steps = ["collect","analyze","write","evaluate","images","done"], idx = steps.indexOf(active); if(s==="completed"){ steps.forEach(step=>$(`#step-${step}`).classList.add("done")); } else if(idx >= 0){ steps.forEach((step,i)=>{ if(i < idx) $(`#step-${step}`).classList.add("done"); if(i===idx) $(`#step-${step}`).classList.add("active"); }); }
             $("#logContainer").innerHTML = (d.logs || []).length ? d.logs.map(line=>`<div class="line">${esc(line)}</div>`).join("") : '<div class="line">等待任务日志</div>'; $("#logContainer").scrollTop = $("#logContainer").scrollHeight;
             await loadNews(); await loadArticle();
@@ -272,14 +314,49 @@
         }
 
         async function loadNews(){ const d = await json("/api/news"), list = d.news || []; $("#newsList").innerHTML = !list.length ? '<div class="empty">执行资讯任务后显示内容</div>' : list.map(item=>`<div class="item"><h4>${esc(item.title || "")}</h4><div class="meta2">${esc(item.source || "未知来源")}</div><div class="sum">${esc(item.summary || "")}</div></div>`).join(""); }
-        async function loadArticle(){ const d = await json("/api/news"); currentArticle = d.article || ""; currentArticleWithImages = d.article_with_images || ""; $("#articleContent").textContent = currentArticle || "等待生成文章"; $("#articleWithImages").textContent = currentArticleWithImages || "等待生成文章"; }
+        function renderArticleWithImageTools(){
+            const box = $("#articleWithImages");
+            if(!currentArticleWithImages){ box.classList.remove("article-render"); box.textContent = "等待生成文章"; return; }
+            box.classList.add("article-render");
+            box.innerHTML = currentArticleWithImages.replace(/\n/g,"<br>");
+            const imgs = [...box.querySelectorAll("img")];
+            imgs.forEach((img, idx) => {
+                const tools = document.createElement("div");
+                tools.className = "img-tools";
+                const btn = document.createElement("button");
+                btn.className = "swap-btn";
+                btn.textContent = "换一张";
+                btn.onclick = () => replaceOneImage(idx);
+                tools.appendChild(btn);
+                const customBtn = document.createElement("button");
+                customBtn.className = "swap-btn secondary";
+                customBtn.textContent = "填URL";
+                customBtn.onclick = () => replaceImageByUrl(idx);
+                tools.appendChild(customBtn);
+                img.insertAdjacentElement("afterend", tools);
+            });
+        }
+        async function loadArticle(){ const d = await json("/api/news"); currentArticle = d.article || ""; currentArticleWithImages = d.article_with_images || ""; $("#articleContent").textContent = currentArticle || "等待生成文章"; renderArticleWithImageTools(); }
+        async function replaceOneImage(index){ const d = await json("/api/news/image/replace",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({index})}); if(!d.success) return alert(d.message || "替换失败"); currentArticleWithImages = d.article_with_images || currentArticleWithImages; renderArticleWithImageTools(); }
+        function replaceImageByUrl(index){
+            const url = window.prompt("请输入新的图片URL（http/https）");
+            if(!url) return;
+            if(!/^https?:\/\//i.test(url.trim())) return alert("URL 格式不正确");
+            const box = document.createElement("div");
+            box.innerHTML = currentArticleWithImages || "";
+            const imgs = [...box.querySelectorAll("img")];
+            if(index < 0 || index >= imgs.length) return alert("图片索引无效");
+            imgs[index].setAttribute("src", url.trim());
+            currentArticleWithImages = box.innerHTML;
+            renderArticleWithImageTools();
+        }
         async function optimizeArticle(){ if(!currentArticle) return alert("请先生成文章"); const d = await json("/api/news/optimize",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({article:currentArticle})}); if(!d.success) return alert(d.message || "优化失败"); if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); }
         async function regenerateArticle(){ const d = await json("/api/news/regenerate",{method:"POST"}); if(!d.success) return alert(d.message || "重生成失败"); if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); }
-        async function publishArticle(){ const content = currentArticleWithImages || currentArticle; if(!content) return alert("请先生成文章"); let title = ""; for(const line of content.split("\n")){ if(line.startsWith("标题：") || line.startsWith("标题:")){ title = line.replace("标题：","").replace("标题:","").trim(); break; } } if(!title) title = "今日建筑机器人行业资讯"; if(!window.confirm(`确认发布？\n\n${title}`)) return; const d = await json("/api/news/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,content,auto_publish:true})}); if(!d.success) return alert(d.message || "发布失败"); if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); alert(d.message || "发布任务已启动"); }
+        async function publishArticle(){ const content = currentArticleWithImages || currentArticle; if(!content) return alert("请先生成文章"); let title = ""; for(const line of content.split("\n")){ if(line.startsWith("标题：") || line.startsWith("标题:")){ title = line.replace("标题：","").replace("标题:","").trim(); break; } } if(!title) title = `今日${currentNewsCategoryLabel}资讯速览`; if(!window.confirm(`确认发布？\n\n${title}`)) return; const d = await json("/api/news/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,content,auto_publish:true})}); if(!d.success) return alert(d.message || "发布失败"); if(taskPollingInterval) clearInterval(taskPollingInterval); taskPollingInterval = setInterval(pollTaskStatus,700); pollTaskStatus(); alert(d.message || "发布任务已启动"); }
         function previewArticle(){ const content = currentArticleWithImages || currentArticle; if(!content) return alert("请先生成文章"); const win = window.open("", "_blank"); win.document.write(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>文章预览</title><style>body{font-family:"Noto Sans SC",sans-serif;max-width:860px;margin:0 auto;padding:24px;background:#f7f2eb;color:#1d1c19;line-height:1.9}.wrap{background:#fffdf9;border-radius:24px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.08)}.meta{color:#756f67;margin-bottom:18px;font-size:14px}img{max-width:100%;border-radius:18px}</style></head><body><div class="wrap"><div class="meta">生成时间：${new Date().toLocaleString("zh-CN")}</div>${content.replace(/\n/g,"<br>")}</div></body></html>`); }
         async function loadArticleHistory(){ const d = await json("/api/news/history"), list = d.history || []; $("#articleHistoryList").innerHTML = !list.length ? '<div class="empty">暂无文章历史</div>' : list.map(item=>`<div class="item"><h4>${esc(item.time || "未记录时间")}</h4><div class="meta2">资讯 ${item.news_count || 0} 条 · ${item.article ? "已生成正文" : "无正文"} · ${esc(item.publish_result || "未发布")}</div></div>`).join(""); }
 
-        refreshStatus(); loadArticle(); pollTaskStatus(); setInterval(refreshStatus, 30000);
+        initNewsCategories(); refreshStatus(); loadArticle(); pollTaskStatus(); setInterval(refreshStatus, 30000);
     </script>
 </body>
 </html>

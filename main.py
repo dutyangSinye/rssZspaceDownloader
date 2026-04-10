@@ -1,5 +1,5 @@
 ﻿# -*- coding: utf-8 -*-
-"""M-TEAM 下载器 + 资讯机器人 Web 应用"""
+"""PT RSS 下载器 + 资讯机器人 Web 应用"""
 
 import os
 import sys
@@ -7,9 +7,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 from threading import Lock, Thread
-from typing import Optional
+from typing import Dict, List, Optional
 
 from flask import Flask, jsonify, render_template, request
+from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -58,6 +59,83 @@ try:
 except AIServiceError as e:
     ai_service_init_error = str(e)
     logger.warning("AI 服务未就绪: %s", e)
+
+
+NEWS_CATEGORIES: Dict[str, Dict] = {
+    "ai": {
+        "label": "人工智能",
+        "keywords": ["人工智能", "AI", "大模型", "智能体", "机器学习", "AIGC"],
+        "hashtags": ["人工智能", "大模型", "科技资讯", "行业观察"],
+    },
+    "internet": {
+        "label": "互联网产品",
+        "keywords": ["互联网", "App", "产品", "平台", "用户增长", "社交媒体"],
+        "hashtags": ["互联网", "产品动态", "平台生态", "行业观察"],
+    },
+    "finance": {
+        "label": "商业财经",
+        "keywords": ["财经", "融资", "上市", "资本市场", "业绩", "投资"],
+        "hashtags": ["商业财经", "市场动态", "产业趋势", "投资观察"],
+    },
+    "industry": {
+        "label": "产业制造",
+        "keywords": ["制造业", "工业", "供应链", "自动化", "工厂", "产业升级"],
+        "hashtags": ["产业制造", "工业升级", "供应链", "行业资讯"],
+    },
+    "policy": {
+        "label": "政策与市场",
+        "keywords": ["政策", "监管", "标准", "产业政策", "市场", "试点"],
+        "hashtags": ["政策解读", "市场观察", "行业趋势", "资讯速览"],
+    },
+    "construction_robot": {
+        "label": "建筑机器人",
+        "keywords": ["建筑机器人", "施工机器人", "砌筑机器人", "巡检机器人", "工地机器人"],
+        "hashtags": ["建筑机器人", "智能建造", "工程科技", "行业资讯"],
+    },
+    "smart_construction": {
+        "label": "智能施工",
+        "keywords": ["智能施工", "智慧工地", "数字工地", "施工自动化", "BIM"],
+        "hashtags": ["智能施工", "智慧工地", "工程数字化", "产业升级"],
+    },
+}
+DEFAULT_NEWS_CATEGORIES = ["ai"]
+
+
+def resolve_news_categories(categories: Optional[List[str]]) -> tuple[List[str], List[str], List[str], List[str]]:
+    category_ids = []
+    for cid in categories or []:
+        c = str(cid).strip()
+        if c and c in NEWS_CATEGORIES and c not in category_ids:
+            category_ids.append(c)
+    if not category_ids:
+        category_ids = list(DEFAULT_NEWS_CATEGORIES)
+
+    labels = [NEWS_CATEGORIES[cid]["label"] for cid in category_ids]
+    keywords: List[str] = []
+    hashtags: List[str] = []
+    for cid in category_ids:
+        for kw in NEWS_CATEGORIES[cid].get("keywords", []):
+            if kw not in keywords:
+                keywords.append(kw)
+        for tag in NEWS_CATEGORIES[cid].get("hashtags", []):
+            if tag not in hashtags:
+                hashtags.append(tag)
+    return category_ids, labels, keywords, hashtags
+
+
+def filter_news_by_keywords(news_list: List[Dict], keywords: List[str]) -> List[Dict]:
+    if not keywords:
+        return news_list
+    lowered = [k.lower() for k in keywords if k]
+    if not lowered:
+        return news_list
+
+    filtered = []
+    for item in news_list:
+        text = f"{item.get('title', '')} {item.get('summary', '')}".lower()
+        if any(k in text for k in lowered):
+            filtered.append(item)
+    return filtered
 
 
 class DownloadManagerCompat:
@@ -115,6 +193,10 @@ class NewsRobot:
             self.article_with_images = ""
             self.publish_result = ""
             self.current_task_id = None
+            self.news_categories = list(DEFAULT_NEWS_CATEGORIES)
+            self.news_category_labels = [NEWS_CATEGORIES[cid]["label"] for cid in self.news_categories]
+            self.news_category = self.news_categories[0]
+            self.news_category_label = "、".join(self.news_category_labels)
 
     def set_status(self, status: str):
         with self.lock:
@@ -144,6 +226,10 @@ class NewsRobot:
                 "article_with_images": self.article_with_images,
                 "publish_result": self.publish_result,
                 "current_task_id": self.current_task_id,
+                "news_categories": list(self.news_categories),
+                "news_category_labels": list(self.news_category_labels),
+                "news_category": self.news_category,
+                "news_category_label": self.news_category_label,
             }
 
 
@@ -156,56 +242,80 @@ def ensure_ai_service() -> AIService:
     return ai_service
 
 
-def collect_news():
-    news_robot.add_log("开始采集资讯")
+def collect_news(categories: Optional[List[str]] = None):
+    category_ids, category_labels, category_keywords, _ = resolve_news_categories(categories)
+    category_label_text = "、".join(category_labels)
+    news_robot.add_log(f"开始采集资讯，类型：{category_label_text}")
     collector = NewsCollector()
-    collector.set_keywords(Settings.COLLECT_KEYWORDS)
+    query_keywords = category_keywords or Settings.COLLECT_KEYWORDS
+    collector.set_keywords(query_keywords)
     news_list = collector.collect_all()
+    filtered_news = filter_news_by_keywords(news_list, category_keywords)
+    if filtered_news:
+        news_robot.add_log(f"按类型筛选后保留 {len(filtered_news)} 条")
+        news_list = filtered_news
+    elif news_list:
+        news_robot.add_log("筛选后无命中，回退为原始采集结果")
 
     if not news_list:
         news_robot.add_log("真实采集为空，使用兜底示例数据")
         news_list = [
             {
-                "title": "建筑机器人应用继续提速",
+                "title": f"{category_label_text}应用持续升温",
                 "source": "系统示例",
                 "url": "https://example.com/1",
-                "summary": "在施工自动化和智能建造场景中，机器人落地速度继续提升。",
+                "summary": f"围绕{category_label_text}的相关场景，落地节奏持续提升。",
                 "time": datetime.now().isoformat(),
             },
             {
-                "title": "多家企业加码智能建造",
+                "title": f"多家企业加码{category_label_text}",
                 "source": "系统示例",
                 "url": "https://example.com/2",
-                "summary": "产业链企业持续投入建筑机器人、数字工地与 AI 协同。",
+                "summary": f"产业链企业持续投入{category_label_text}相关能力建设。",
                 "time": datetime.now().isoformat(),
             },
         ]
 
     with news_robot.lock:
         news_robot.news_list = news_list
+        news_robot.news_categories = category_ids
+        news_robot.news_category_labels = category_labels
+        news_robot.news_category = category_ids[0]
+        news_robot.news_category_label = category_label_text
     news_robot.add_log(f"采集完成，共 {len(news_list)} 条")
     return news_list
 
 
-def run_full_news_task(task_id=None):
+def run_full_news_task(task_id=None, categories: Optional[List[str]] = None):
+    category_ids, category_labels, _, category_tags = resolve_news_categories(categories)
+    category_label_text = "、".join(category_labels)
     with news_robot.lock:
         news_robot.current_task_id = task_id or f"task_{int(time.time())}"
+        news_robot.news_categories = category_ids
+        news_robot.news_category_labels = category_labels
+        news_robot.news_category = category_ids[0]
+        news_robot.news_category_label = category_label_text
 
     try:
         service = ensure_ai_service()
 
         news_robot.set_status("collecting")
-        collect_news()
+        collect_news(category_ids)
 
         news_robot.set_status("analyzing")
         news_robot.add_log("开始分析资讯")
-        analysis = service.analyze_news(news_robot.snapshot()["news"])
+        analysis = service.analyze_news(news_robot.snapshot()["news"], topic_label=category_label_text)
         with news_robot.lock:
             news_robot.analysis = analysis
 
         news_robot.set_status("writing")
         news_robot.add_log("开始生成文章")
-        article = service.write_article(news_robot.snapshot()["news"], analysis)
+        article = service.write_article(
+            news_robot.snapshot()["news"],
+            analysis,
+            topic_label=category_label_text,
+            topic_tags=category_tags,
+        )
         with news_robot.lock:
             news_robot.article = article
 
@@ -215,7 +325,9 @@ def run_full_news_task(task_id=None):
 
         news_robot.set_status("embedding_images")
         news_robot.add_log("开始补充配图")
-        article_with_images = embed_images(article, ImageSearcher(), max_images=5)
+        searcher = ImageSearcher()
+        searcher.add_news_candidates(news_robot.snapshot()["news"])
+        article_with_images = embed_images(article, searcher, max_images=5)
         with news_robot.lock:
             news_robot.article_with_images = article_with_images
 
@@ -223,6 +335,10 @@ def run_full_news_task(task_id=None):
             "id": news_robot.snapshot()["current_task_id"],
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "news_count": len(news_robot.snapshot()["news"]),
+            "news_categories": news_robot.snapshot()["news_categories"],
+            "news_category_labels": news_robot.snapshot()["news_category_labels"],
+            "news_category": news_robot.snapshot()["news_category"],
+            "news_category_label": news_robot.snapshot()["news_category_label"],
             "news": news_robot.snapshot()["news"][:10],
             "analysis": analysis,
             "article": article,
@@ -445,6 +561,10 @@ def api_news_status():
             "news_count": len(snapshot["news"]),
             "logs": news_robot.get_logs(20),
             "current_task_id": snapshot["current_task_id"],
+            "news_categories": snapshot["news_categories"],
+            "news_category_labels": snapshot["news_category_labels"],
+            "news_category": snapshot["news_category"],
+            "news_category_label": snapshot["news_category_label"],
         }
     )
 
@@ -472,6 +592,21 @@ def api_news():
             "article": snapshot["article"],
             "article_with_images": snapshot["article_with_images"],
             "publish_result": snapshot["publish_result"],
+            "news_categories": snapshot["news_categories"],
+            "news_category_labels": snapshot["news_category_labels"],
+            "news_category": snapshot["news_category"],
+            "news_category_label": snapshot["news_category_label"],
+        }
+    )
+
+
+@app.route("/api/news/categories")
+def api_news_categories():
+    return jsonify(
+        {
+            "success": True,
+            "default": DEFAULT_NEWS_CATEGORIES,
+            "categories": [{"id": cid, "label": info["label"]} for cid, info in NEWS_CATEGORIES.items()],
         }
     )
 
@@ -482,10 +617,29 @@ def api_news_start():
         return jsonify({"success": False, "message": ai_service_init_error or "AI 服务未就绪"})
     if news_robot.get_status() not in ["idle", "completed", "error"]:
         return jsonify({"success": False, "message": "当前已有资讯任务正在运行"})
+    data = request.get_json() or {}
+    categories = data.get("categories")
+    if not isinstance(categories, list):
+        categories = [data.get("category")] if data.get("category") else list(DEFAULT_NEWS_CATEGORIES)
+    category_ids, category_labels, _, _ = resolve_news_categories(categories)
+    category_label_text = "、".join(category_labels)
     news_robot.reset()
-    news_robot.add_log("任务启动")
-    Thread(target=run_full_news_task, daemon=True).start()
-    return jsonify({"success": True})
+    with news_robot.lock:
+        news_robot.news_categories = category_ids
+        news_robot.news_category_labels = category_labels
+        news_robot.news_category = category_ids[0]
+        news_robot.news_category_label = category_label_text
+    news_robot.add_log(f"任务启动，资讯类型：{category_label_text}")
+    Thread(target=run_full_news_task, kwargs={"categories": category_ids}, daemon=True).start()
+    return jsonify(
+        {
+            "success": True,
+            "news_categories": category_ids,
+            "news_category_labels": category_labels,
+            "news_category": category_ids[0],
+            "news_category_label": category_label_text,
+        }
+    )
 
 
 @app.route("/api/news/optimize", methods=["POST"])
@@ -505,7 +659,9 @@ def api_news_optimize():
             service = ensure_ai_service()
             evaluation = service.evaluate_article(article)
             optimized = service.optimize_article(article, evaluation)
-            article_with_images = embed_images(optimized, ImageSearcher(), max_images=5)
+            searcher = ImageSearcher()
+            searcher.add_news_candidates(news_robot.snapshot()["news"])
+            article_with_images = embed_images(optimized, searcher, max_images=5)
             with news_robot.lock:
                 news_robot.article = optimized
                 news_robot.article_with_images = article_with_images
@@ -521,7 +677,8 @@ def api_news_optimize():
 
 @app.route("/api/news/regenerate", methods=["POST"])
 def api_news_regenerate():
-    if not news_robot.snapshot()["news"]:
+    snapshot = news_robot.snapshot()
+    if not snapshot["news"]:
         return jsonify({"success": False, "message": "没有可用资讯"})
     if ai_service is None:
         return jsonify({"success": False, "message": ai_service_init_error or "AI 服务未就绪"})
@@ -532,8 +689,17 @@ def api_news_regenerate():
     def do_regenerate():
         try:
             service = ensure_ai_service()
-            article = service.write_article(news_robot.snapshot()["news"], news_robot.snapshot()["analysis"])
-            article_with_images = embed_images(article, ImageSearcher(), max_images=5)
+            current_snapshot = news_robot.snapshot()
+            _, category_labels, _, category_tags = resolve_news_categories(current_snapshot.get("news_categories"))
+            article = service.write_article(
+                current_snapshot["news"],
+                current_snapshot["analysis"],
+                topic_label="、".join(category_labels),
+                topic_tags=category_tags,
+            )
+            searcher = ImageSearcher()
+            searcher.add_news_candidates(current_snapshot["news"])
+            article_with_images = embed_images(article, searcher, max_images=5)
             with news_robot.lock:
                 news_robot.article = article
                 news_robot.article_with_images = article_with_images
@@ -545,6 +711,54 @@ def api_news_regenerate():
 
     Thread(target=do_regenerate, daemon=True).start()
     return jsonify({"success": True, "message": "重生成任务已启动"})
+
+
+@app.route("/api/news/image/replace", methods=["POST"])
+def api_news_image_replace():
+    data = request.get_json() or {}
+    index = data.get("index")
+    try:
+        index = int(index)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "无效图片索引"})
+
+    snapshot = news_robot.snapshot()
+    article_html = snapshot.get("article_with_images") or snapshot.get("article") or ""
+    if not article_html:
+        return jsonify({"success": False, "message": "当前没有可替换的文章内容"})
+
+    soup = BeautifulSoup(article_html, "html.parser")
+    images = soup.find_all("img")
+    if not images:
+        return jsonify({"success": False, "message": "当前文章没有配图"})
+    if index < 0 or index >= len(images):
+        return jsonify({"success": False, "message": "图片索引超出范围"})
+
+    target_img = images[index]
+    current_url = (target_img.get("src") or "").strip()
+    desc = (target_img.get("alt") or "").strip() or "资讯配图"
+    context = soup.get_text(" ", strip=True)[:1200]
+
+    searcher = ImageSearcher()
+    searcher.add_news_candidates(snapshot.get("news", []))
+    candidates = searcher.search(
+        desc,
+        max_results=8,
+        context=context,
+        exclude_urls=[current_url] if current_url else [],
+    )
+    if not candidates:
+        return jsonify({"success": False, "message": "没有找到可替换的候选图片"})
+
+    new_url = candidates[0]
+    target_img["src"] = new_url
+    updated_html = str(soup)
+
+    with news_robot.lock:
+        news_robot.article_with_images = updated_html
+
+    news_robot.add_log(f"第 {index + 1} 张图片已替换")
+    return jsonify({"success": True, "index": index, "new_url": new_url, "article_with_images": updated_html})
 
 
 @app.route("/api/news/publish", methods=["POST"])
@@ -612,7 +826,7 @@ def serve_preview(filename):
 
 if __name__ == "__main__":
     logger.info("=" * 50)
-    logger.info("M-TEAM Downloader + 资讯机器人")
+    logger.info("PT RSS Downloader + 资讯机器人")
     logger.info("访问地址: http://localhost:%s", Settings.PORT)
     logger.info("=" * 50)
     app.run(host=Settings.HOST, port=Settings.PORT, debug=Settings.DEBUG, threaded=True, use_reloader=False)

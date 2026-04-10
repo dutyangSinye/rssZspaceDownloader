@@ -1,5 +1,7 @@
 # AI service
+import json
 import logging
+import subprocess
 
 import requests
 from openai import OpenAI
@@ -81,20 +83,24 @@ class AIService:
             raise AIServiceError(f"OpenAI 调用失败: {e}") from e
 
     def _chat_ollama(self, prompt: str, system_prompt: str, max_tokens: int = None) -> str:
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+            "max_tokens": max_tokens or self.max_output_tokens,
+            "temperature": self.temperature,
+        }
+        headers = {"Authorization": f"Bearer {Settings.OLLAMA_API_KEY}"} if Settings.OLLAMA_API_KEY else None
+        url = f"{self.base_url}/v1/chat/completions"
         try:
             logger.info("调用 Ollama: %s", self.model)
             resp = requests.post(
-                f"{self.base_url}/v1/chat/completions",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "stream": False,
-                    "max_tokens": max_tokens or self.max_output_tokens,
-                    "temperature": self.temperature,
-                },
+                url,
+                headers=headers,
+                json=payload,
                 timeout=600,
             )
             if resp.status_code >= 400:
@@ -109,13 +115,52 @@ class AIService:
             if not content:
                 raise AIServiceError("Ollama 返回内容为空")
             return content
+        except requests.exceptions.RequestException as e:
+            logger.warning("requests 调用失败，尝试 curl 兜底: %s", e)
+            return self._chat_ollama_via_curl(url, payload, headers)
         except AIServiceError:
             raise
         except Exception as e:
             logger.error("Ollama 调用失败: %s", e)
             raise AIServiceError(f"Ollama 调用失败: {e}") from e
 
-    def analyze_news(self, news_list: list) -> str:
+    def _chat_ollama_via_curl(self, url: str, payload: dict, headers: dict | None = None) -> str:
+        cmd = ["curl.exe", "-sS", "-X", "POST", url, "-H", "Content-Type: application/json"]
+        if headers and headers.get("Authorization"):
+            cmd.extend(["-H", f"Authorization: {headers['Authorization']}"])
+        cmd.extend(["--data-binary", json.dumps(payload, ensure_ascii=False)])
+
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=120)
+        except Exception as e:
+            raise AIServiceError(f"curl 调用失败: {e}") from e
+
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip()
+            raise AIServiceError(f"curl 请求失败: {stderr or f'退出码 {proc.returncode}'}")
+
+        text = (proc.stdout or "").strip()
+        if not text:
+            raise AIServiceError("curl 返回为空")
+
+        try:
+            result = json.loads(text)
+        except Exception as e:
+            preview = text[:200].replace("\n", " ")
+            raise AIServiceError(f"curl 返回非 JSON: {preview}") from e
+
+        if result.get("error"):
+            err = result["error"]
+            msg = err.get("message") if isinstance(err, dict) else str(err)
+            raise AIServiceError(f"模型接口错误: {msg}")
+
+        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = (content or "").strip()
+        if not content:
+            raise AIServiceError("curl 返回内容为空")
+        return content
+
+    def analyze_news(self, news_list: list, topic_label: str = "行业资讯") -> str:
         if not news_list:
             return "未采集到任何资讯"
 
@@ -123,7 +168,7 @@ class AIService:
             [f"- {n.get('title', '')} ({n.get('source', '')})\n  {n.get('summary', '')}" for n in news_list[:30]]
         )
 
-        prompt = f"""你是一个专业的建筑机器人行业分析师。请分析以下资讯，总结行业趋势和重要事件：
+        prompt = f"""你是一个专业的{topic_label}分析师。请分析以下资讯，总结趋势和重要事件：
 
 {news_text}
 
@@ -136,9 +181,15 @@ class AIService:
 
 要求：专业、客观、有深度，尽量基于资讯内容，不编造数据。"""
 
-        return self.chat(prompt, "你是一名资深科技行业分析师，擅长归纳与分析行业资讯。")
+        return self.chat(prompt, f"你是一名资深{topic_label}分析师，擅长归纳与分析资讯。")
 
-    def write_article(self, news_list: list, analysis: str) -> str:
+    def write_article(
+        self,
+        news_list: list,
+        analysis: str,
+        topic_label: str = "行业资讯",
+        topic_tags: list | None = None,
+    ) -> str:
         if not news_list:
             return "无可用资讯"
 
@@ -146,6 +197,9 @@ class AIService:
         news_details = "\n\n".join(
             [f"### {n.get('title', '')}\n{n.get('summary', '')}\n来源: {n.get('source', '')}" for n in top_news]
         )
+
+        tags = topic_tags or ["资讯速览", "行业观察", "趋势分析", "热点追踪"]
+        tag_text = " ".join(f"#{tag}" for tag in tags)
 
         prompt = f"""你是一名资深科技自媒体编辑，擅长撰写今日头条风格的中文文章。
 请根据以下资讯和分析，写一篇可发布的文章：
@@ -163,7 +217,10 @@ class AIService:
 4. 结尾加入互动引导。
 5. 必须为中文。
 6. 在需要配图的位置使用 [图片描述:xxx] 标记，至少 5 处。
-7. 不编造无法从资讯中推出的事实。
+7. 图片描述必须具体，格式建议为“主体+场景+动作/特征”，例如“建筑机器人在工地进行墙体施工”。
+8. 图片描述应与紧邻段落语义一致，避免抽象词（如“未来感”“科技感”）单独成句。
+9. 不编造无法从资讯中推出的事实。
+10. 内容主题要围绕“{topic_label}”展开。
 
 输出格式：
 ---
@@ -175,7 +232,7 @@ class AIService:
 
 正文：[文章正文，适当位置插入[图片描述:xxx]标记]
 
-话题标签：#建筑机器人 #行业资讯 #科技创新 #智能建造
+话题标签：{tag_text}
 ---"""
 
         return self.chat(prompt, "你是一名资深科技自媒体编辑，擅长写适合中文平台发布的深度文章。")
