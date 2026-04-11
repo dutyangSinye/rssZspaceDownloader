@@ -61,7 +61,6 @@ class ToutiaoPublisher:
                         time.sleep(1)
 
                 if not is_logged_in:
-                    browser.close()
                     return {"success": False, "message": "登录超时，请重试"}
 
                 self._log("打开发布页...")
@@ -72,22 +71,27 @@ class ToutiaoPublisher:
 
                 self._log(f"填写标题: {title[:30]}...")
                 if not self._fill_title(page, title):
-                    browser.close()
                     return {"success": False, "message": "标题填写失败"}
 
                 self._log("填写正文...")
                 if not self._fill_content(page, content):
-                    browser.close()
                     return {"success": False, "message": "正文填写失败"}
 
                 if not auto_publish:
                     self._log("发布页已打开，请手动确认发布")
-                    browser.close()
                     return {"success": True, "message": "发布页已打开，请手动确认"}
 
                 self._log("点击发布按钮...")
                 result = self._click_publish(page)
-                browser.close()
+                if Settings.TOUTIAO_KEEP_OPEN_AFTER_PUBLISH:
+                    if result.get("success"):
+                        self._log("发布后保留页面以便人工复核")
+                        result["message"] = f"{result.get('message', '发布流程完成')}（页面已保留）"
+                    else:
+                        self._log("发布结果未确认，页面已保留便于人工核对")
+                        result["message"] = f"{result.get('message', '发布结果未确认')}（页面已保留，请手动核查）"
+                else:
+                    browser.close()
                 return result
 
         except Exception as e:

@@ -38,6 +38,7 @@ class Settings:
 
     TOUTIAO_COOKIE: str = ""
     TOUTIAO_HEADLESS: bool = False
+    TOUTIAO_KEEP_OPEN_AFTER_PUBLISH: bool = True
 
     COLLECT_KEYWORDS: List[str] = ["建筑机器人", "智能建造", "施工机器人"]
 
@@ -99,6 +100,9 @@ class Settings:
 
         cls.TOUTIAO_COOKIE = os.getenv("TOUTIAO_COOKIE", cls.TOUTIAO_COOKIE)
         cls.TOUTIAO_HEADLESS = os.getenv("TOUTIAO_HEADLESS", str(cls.TOUTIAO_HEADLESS)).lower() == "true"
+        cls.TOUTIAO_KEEP_OPEN_AFTER_PUBLISH = (
+            os.getenv("TOUTIAO_KEEP_OPEN_AFTER_PUBLISH", str(cls.TOUTIAO_KEEP_OPEN_AFTER_PUBLISH)).lower() == "true"
+        )
 
         keywords = os.getenv("COLLECT_KEYWORDS", "")
         if keywords:
