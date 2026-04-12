@@ -1,0 +1,321 @@
+﻿{% raw %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>管理后台 - M-TEAM Downloader</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@latest/dist/index.css" />
+  <style>
+    body{
+      margin:0;
+      font-family:"Segoe UI","Microsoft YaHei",sans-serif;
+      background:linear-gradient(120deg,#eef3ff 0%,#f8f9fb 50%,#ecf8ff 100%);
+      min-height:100vh;
+      color:#1f2937;
+    }
+    .page{max-width:1360px;margin:0 auto;padding:16px}
+    .top{margin-bottom:12px}
+    .head-title{font-size:20px;font-weight:700}
+    .head-sub{font-size:13px;color:#6b7280;margin-top:4px}
+    .mono{font-family:Consolas,Menlo,monospace}
+    .action-row{display:flex;flex-wrap:wrap;gap:6px}
+  </style>
+</head>
+<body>
+<div id="app" class="page">
+  <el-card class="top" shadow="never">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div>
+        <div class="head-title">管理员后台</div>
+        <div class="head-sub">{{ adminWho }}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <el-button @click="refreshAll">刷新</el-button>
+        <el-button type="danger" plain @click="logout">退出登录</el-button>
+      </div>
+    </div>
+  </el-card>
+
+  <el-row :gutter="12">
+    <el-col :xs="24" :lg="9">
+      <el-card shadow="never" style="margin-bottom:12px;">
+        <template #header><b>新增租户</b></template>
+        <el-form label-position="top">
+          <el-row :gutter="10">
+            <el-col :xs="24" :md="12">
+              <el-form-item label="租户 Key">
+                <el-input v-model="createForm.tenant_key" placeholder="例如 team_a" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :md="12">
+              <el-form-item label="租户名称">
+                <el-input v-model="createForm.tenant_name" placeholder="例如 A组" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-form-item label="复制配置来源">
+            <el-input v-model="createForm.copy_from" placeholder="default" />
+          </el-form-item>
+
+          <el-divider content-position="left">可选：初始用户</el-divider>
+          <el-row :gutter="10">
+            <el-col :xs="24" :md="12">
+              <el-form-item label="租户用户名">
+                <el-input v-model="createForm.user_username" />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :md="12">
+              <el-form-item label="租户密码">
+                <el-input v-model="createForm.user_password" type="password" show-password />
+              </el-form-item>
+            </el-col>
+          </el-row>
+
+          <el-button type="primary" :loading="createLoading" @click="createTenant">创建租户</el-button>
+        </el-form>
+      </el-card>
+
+      <el-card shadow="never">
+        <template #header><b>旧历史迁移</b></template>
+        <el-form label-position="top">
+          <el-form-item label="目标租户 Key">
+            <el-input v-model="migrateTenant" placeholder="default" />
+          </el-form-item>
+          <el-button type="warning" :loading="migrateLoading" @click="migrateHistory">迁移 data/history.json</el-button>
+        </el-form>
+      </el-card>
+    </el-col>
+
+    <el-col :xs="24" :lg="15">
+      <el-card shadow="never" style="margin-bottom:12px;">
+        <template #header><b>租户列表</b></template>
+        <el-table :data="tenants" stripe v-loading="tenantLoading" empty-text="暂无租户">
+          <el-table-column prop="tenant_key" label="Key" width="180">
+            <template #default="scope"><span class="mono">{{ scope.row.tenant_key }}</span></template>
+          </el-table-column>
+          <el-table-column prop="tenant_name" label="名称" min-width="160" />
+          <el-table-column label="状态" width="100">
+            <template #default="scope">
+              <el-tag :type="scope.row.tenant_status==='active' ? 'success' : 'warning'">{{ scope.row.tenant_status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="updated_at" label="更新时间" width="180" />
+          <el-table-column label="操作" min-width="330" fixed="right">
+            <template #default="scope">
+              <div class="action-row">
+                <el-button size="small" @click="setStatus(scope.row.tenant_key, 'active')">启用</el-button>
+                <el-button size="small" type="warning" @click="setStatus(scope.row.tenant_key, 'disabled')">停用</el-button>
+                <el-button size="small" type="danger" plain @click="delTenant(scope.row.tenant_key)">软删除</el-button>
+                <el-button size="small" type="danger" @click="hardDelTenant(scope.row.tenant_key)" :disabled="scope.row.tenant_key==='default'">硬删除</el-button>
+                <el-button size="small" type="primary" plain @click="loadAudits(scope.row.tenant_key)">查看审计</el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </el-col>
+  </el-row>
+
+  <el-card shadow="never">
+    <template #header>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <b>审计日志</b>
+        <span class="head-sub">当前租户：{{ selectedTenant }}</span>
+      </div>
+    </template>
+    <el-table :data="audits" stripe v-loading="auditLoading" empty-text="暂无日志">
+      <el-table-column prop="action" label="动作" min-width="180" />
+      <el-table-column prop="actor" label="操作者" width="180" />
+      <el-table-column label="详情" min-width="260">
+        <template #default="scope">{{ formatDetail(scope.row.detail) }}</template>
+      </el-table-column>
+      <el-table-column prop="created_at" label="时间" width="180" />
+    </el-table>
+  </el-card>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus@latest/dist/index.full.min.js"></script>
+<script>
+  const { createApp, reactive, ref, onMounted } = Vue;
+
+  createApp({
+    setup(){
+      const adminWho = ref('加载中...');
+      const selectedTenant = ref('default');
+      const tenants = ref([]);
+      const audits = ref([]);
+      const tenantLoading = ref(false);
+      const auditLoading = ref(false);
+      const createLoading = ref(false);
+      const migrateLoading = ref(false);
+
+      const createForm = reactive({
+        tenant_key: '',
+        tenant_name: '',
+        copy_from: 'default',
+        user_username: '',
+        user_password: ''
+      });
+      const migrateTenant = ref('default');
+
+      async function api(url, options={}){
+        const r = await fetch(url, options);
+        return await r.json();
+      }
+
+      async function ensureLogin(){
+        const d = await api('/api/admin/me');
+        if(!d.success){ location.href='/admin/login'; return false; }
+        adminWho.value = `管理员：${d.username}`;
+        return true;
+      }
+
+      async function createTenant(){
+        if(!createForm.tenant_key.trim()){
+          ElementPlus.ElMessage.warning('请填写租户 Key');
+          return;
+        }
+        createLoading.value = true;
+        const payload = {
+          tenant_key: createForm.tenant_key.trim().toLowerCase(),
+          tenant_name: createForm.tenant_name.trim(),
+          copy_from: (createForm.copy_from || 'default').trim().toLowerCase() || 'default',
+          user_username: createForm.user_username.trim(),
+          user_password: createForm.user_password || ''
+        };
+        const d = await api('/api/admin/tenants', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        createLoading.value = false;
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '创建失败'); return; }
+        ElementPlus.ElMessage.success('创建成功');
+        createForm.tenant_key = '';
+        createForm.tenant_name = '';
+        createForm.user_username = '';
+        createForm.user_password = '';
+        await refreshAll();
+      }
+
+      async function setStatus(tenantKey, status){
+        const d = await api(`/api/admin/tenant/${encodeURIComponent(tenantKey)}/status`, {
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ tenant_status: status })
+        });
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '操作失败'); return; }
+        ElementPlus.ElMessage.success('状态已更新');
+        await refreshAll();
+      }
+
+      async function delTenant(tenantKey){
+        if(tenantKey === 'default'){
+          ElementPlus.ElMessage.warning('默认租户不允许删除');
+          return;
+        }
+        try{
+          await ElementPlus.ElMessageBox.confirm(`确认软删除租户 ${tenantKey} 吗？`, '确认操作', { type:'warning' });
+        }catch(_){ return; }
+        const d = await api(`/api/admin/tenant/${encodeURIComponent(tenantKey)}`, { method:'DELETE' });
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '删除失败'); return; }
+        ElementPlus.ElMessage.success('已软删除');
+        await refreshAll();
+      }
+
+      async function hardDelTenant(tenantKey){
+        if(tenantKey === 'default'){
+          ElementPlus.ElMessage.warning('默认租户不允许删除');
+          return;
+        }
+        try{
+          await ElementPlus.ElMessageBox.confirm(`确认硬删除租户 ${tenantKey} 吗？该操作不可恢复。`, '高风险确认', { type:'error' });
+        }catch(_){ return; }
+        const d = await api(`/api/admin/tenant/${encodeURIComponent(tenantKey)}?hard=true`, { method:'DELETE' });
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '硬删除失败'); return; }
+        ElementPlus.ElMessage.success('已硬删除');
+        await refreshAll();
+      }
+
+      async function loadTenants(){
+        tenantLoading.value = true;
+        const d = await api('/api/admin/tenants');
+        tenantLoading.value = false;
+        tenants.value = d.tenants || [];
+      }
+
+      async function loadAudits(tenantKey){
+        selectedTenant.value = tenantKey;
+        auditLoading.value = true;
+        const d = await api(`/api/admin/tenant/${encodeURIComponent(tenantKey)}/audits?limit=50`);
+        auditLoading.value = false;
+        audits.value = d.audits || [];
+      }
+
+      async function migrateHistory(){
+        const tenantKey = (migrateTenant.value || 'default').trim().toLowerCase() || 'default';
+        migrateLoading.value = true;
+        const d = await api('/api/admin/migrations/legacy-history', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ tenant_key: tenantKey })
+        });
+        migrateLoading.value = false;
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '迁移失败'); return; }
+        const r = d.result || {};
+        ElementPlus.ElMessage.success(`迁移完成：总数 ${r.total ?? 0}，导入 ${r.imported ?? 0}，跳过 ${r.skipped ?? 0}`);
+        await loadAudits(tenantKey);
+        await loadTenants();
+      }
+
+      function formatDetail(detail){
+        try { return JSON.stringify(detail || {}); }
+        catch(_) { return '{}'; }
+      }
+
+      async function refreshAll(){
+        await loadTenants();
+        await loadAudits(selectedTenant.value || 'default');
+      }
+
+      async function logout(){
+        await api('/api/admin/logout', { method:'POST' });
+        location.href = '/admin/login';
+      }
+
+      onMounted(async ()=>{
+        if(await ensureLogin()) await refreshAll();
+      });
+
+      return {
+        adminWho,
+        selectedTenant,
+        tenants,
+        audits,
+        tenantLoading,
+        auditLoading,
+        createLoading,
+        migrateLoading,
+        createForm,
+        migrateTenant,
+        createTenant,
+        setStatus,
+        delTenant,
+        hardDelTenant,
+        loadAudits,
+        migrateHistory,
+        formatDetail,
+        refreshAll,
+        logout,
+      };
+    }
+  }).use(ElementPlus).mount('#app');
+</script>
+</body>
+</html>
+
+{% endraw %}
+

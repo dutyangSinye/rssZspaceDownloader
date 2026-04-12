@@ -1,0 +1,392 @@
+﻿{% raw %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>用户控制台 - M-TEAM Downloader</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@latest/dist/index.css" />
+  <style>
+    body{
+      margin:0;
+      font-family:"Segoe UI","Microsoft YaHei",sans-serif;
+      background:linear-gradient(120deg,#e8f4ff 0%,#f7f8fb 48%,#e7fbf2 100%);
+      color:#1f2937;
+      min-height:100vh;
+    }
+    .page{max-width:1320px;margin:0 auto;padding:16px}
+    .top{margin-bottom:12px}
+    .head-title{font-size:20px;font-weight:700}
+    .head-sub{font-size:13px;color:#6b7280;margin-top:4px}
+    .main-wrap{display:grid;grid-template-columns:220px 1fr;gap:12px}
+    .menu-card .el-menu{border-right:none}
+    .panel{display:grid;gap:12px}
+    .rss-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .rss-item{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fafafa}
+    .block-title{font-size:14px;font-weight:700;color:#374151;margin-bottom:10px}
+    .mono{font-family:Consolas,Menlo,monospace}
+    @media (max-width:1000px){
+      .main-wrap{grid-template-columns:1fr}
+      .rss-mode-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+<div id="app" class="page">
+  <el-card class="top" shadow="never">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div>
+        <div class="head-title">租户用户控制台</div>
+        <div class="head-sub">{{ who }}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <el-button @click="refreshAll">刷新</el-button>
+        <el-button type="danger" plain @click="logout">退出登录</el-button>
+      </div>
+    </div>
+  </el-card>
+
+  <div class="main-wrap">
+    <el-card class="menu-card" shadow="never">
+      <div class="block-title">功能菜单</div>
+      <el-menu :default-active="activeMenu" @select="activeMenu = $event">
+        <el-menu-item index="main">主功能</el-menu-item>
+        <el-menu-item index="config">配置中心</el-menu-item>
+      </el-menu>
+    </el-card>
+
+    <div class="panel" v-if="activeMenu === 'main'">
+      <el-card shadow="never">
+        <template #header>
+          <div class="block-title" style="margin:0;">下载任务</div>
+        </template>
+        <el-form :inline="true" label-width="70px">
+          <el-form-item label="模式">
+            <el-select v-model="taskForm.mode" placeholder="请选择模式" style="min-width:240px">
+              <el-option v-for="m in enabledModes" :key="m.mode" :label="`${m.mode_name} (${m.mode})`" :value="m.mode" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="关键词">
+            <el-input v-model="taskForm.keywords" placeholder="空格或逗号分隔" style="min-width:260px" />
+          </el-form-item>
+          <el-form-item>
+            <el-button @click="preview" :loading="previewLoading">预览 RSS</el-button>
+            <el-button type="primary" @click="startDownload" :loading="downloadStarting">开始下载</el-button>
+            <el-button text @click="activeMenu='config'">去配置中心</el-button>
+          </el-form-item>
+        </el-form>
+        <el-alert :title="progressText" type="info" :closable="false" style="margin-top:8px" />
+      </el-card>
+
+      <el-card shadow="never">
+        <template #header>
+          <div class="block-title" style="margin:0;">
+            RSS 预览 {{ previewModeName ? `- ${previewModeName}` : '' }}（已显示 {{ previewItems.length }} / 总计 {{ previewTotal }}）
+          </div>
+        </template>
+        <el-table
+          :data="previewItems"
+          stripe
+          style="width:100%"
+          v-loading="previewLoading"
+          empty-text="暂无预览数据"
+          table-layout="auto"
+          :tooltip-options="{ placement: 'top' }"
+        >
+          <el-table-column label="中文名称" min-width="280" show-overflow-tooltip>
+            <template #default="scope">
+              <span>{{ scope.row.chinese_name || scope.row.title || '未命名种子' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="原标题" min-width="320" show-overflow-tooltip />
+          <el-table-column label="种子链接" min-width="120">
+            <template #default="scope">
+              <el-link v-if="scope.row.enclosure_url" :href="scope.row.enclosure_url" target="_blank" type="primary">打开</el-link>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="scope">
+              <el-button type="primary" link @click="downloadOne(scope.row)">下载</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <el-card shadow="never">
+        <template #header>
+          <div class="block-title" style="margin:0;">下载历史</div>
+        </template>
+        <el-table :data="history" stripe style="width:100%" empty-text="暂无历史">
+          <el-table-column label="模式" min-width="220">
+            <template #default="scope">
+              <div>{{ scope.row.mode_name || scope.row.mode || '-' }}</div>
+            </template>
+          </el-table-column>
+          <el-table-column label="统计" min-width="260">
+            <template #default="scope">
+              新增 {{ scope.row.statistics?.added_count ?? 0 }} / 跳过 {{ scope.row.statistics?.skipped_count ?? 0 }} / 失败 {{ scope.row.statistics?.failed_count ?? 0 }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="time" label="时间" width="180" />
+        </el-table>
+      </el-card>
+    </div>
+
+    <div class="panel" v-else>
+      <el-card shadow="never">
+        <template #header>
+          <div class="block-title" style="margin:0;">租户配置</div>
+        </template>
+
+        <el-form label-width="110px">
+          <el-form-item label="租户名称">
+            <el-input v-model="config.tenant_name" />
+          </el-form-item>
+        </el-form>
+
+        <el-divider content-position="left">Transmission</el-divider>
+        <el-form label-width="90px">
+          <el-row :gutter="10">
+            <el-col :xs="24" :md="12"><el-form-item label="Host"><el-input v-model="config.transmission.host" /></el-form-item></el-col>
+            <el-col :xs="24" :md="6"><el-form-item label="用户名"><el-input v-model="config.transmission.username" /></el-form-item></el-col>
+            <el-col :xs="24" :md="6"><el-form-item label="密码"><el-input v-model="config.transmission.password" type="password" show-password /></el-form-item></el-col>
+          </el-row>
+          <el-row :gutter="10">
+            <el-col :xs="24" :md="8"><el-form-item label="超时"><el-input-number v-model="config.transmission.request_timeout" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
+            <el-col :xs="24" :md="8"><el-form-item label="重试次数"><el-input-number v-model="config.transmission.max_retries" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
+            <el-col :xs="24" :md="8"><el-form-item label="重试间隔"><el-input-number v-model="config.transmission.retry_delay" :min="0" :step="1" style="width:100%" /></el-form-item></el-col>
+          </el-row>
+        </el-form>
+
+        <el-divider content-position="left">RSS 模式</el-divider>
+        <div class="rss-mode-grid">
+          <div class="rss-item" v-for="(m, mode) in config.rss_modes" :key="mode">
+            <div class="block-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span class="mono">{{ mode }}</span>
+              <el-switch v-model="m.enabled" :active-value="1" :inactive-value="0" />
+            </div>
+            <el-form label-width="80px">
+              <el-form-item label="名称"><el-input v-model="m.mode_name" /></el-form-item>
+              <el-form-item label="RSS URL"><el-input v-model="m.rss_url" /></el-form-item>
+              <el-form-item label="目录"><el-input v-model="m.download_dir" /></el-form-item>
+            </el-form>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
+          <el-button @click="activeMenu='main'">返回主功能</el-button>
+        </div>
+      </el-card>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus@latest/dist/index.full.min.js"></script>
+<script>
+  const { createApp, reactive, ref, computed, onMounted } = Vue;
+
+  createApp({
+    setup(){
+      const who = ref('加载中...');
+      const activeMenu = ref('main');
+      const progressText = ref('等待中');
+      const previewModeName = ref('');
+      const previewTotal = ref(0);
+      const previewItems = ref([]);
+      const history = ref([]);
+      const taskId = ref('');
+      const previewLoading = ref(false);
+      const downloadStarting = ref(false);
+      const saving = ref(false);
+
+      const taskForm = reactive({ mode: '', keywords: '' });
+      const config = reactive({
+        tenant_name: '',
+        transmission: {
+          host: '', username: '', password: '', request_timeout: 30, max_retries: 3, retry_delay: 2
+        },
+        rss_modes: {}
+      });
+
+      const enabledModes = computed(()=>{
+        return Object.entries(config.rss_modes || {})
+          .filter(([, m]) => Number(m.enabled) === 1)
+          .map(([mode, m]) => ({ mode, mode_name: m.mode_name || mode }));
+      });
+
+      async function api(url, options={}){
+        const resp = await fetch(url, options);
+        return await resp.json();
+      }
+
+      function normalizeConfig(input){
+        const c = input || {};
+        config.tenant_name = c.tenant_name || '';
+        config.transmission = {
+          host: c.transmission?.host || '',
+          username: c.transmission?.username || '',
+          password: c.transmission?.password || '',
+          request_timeout: Number(c.transmission?.request_timeout ?? 30),
+          max_retries: Number(c.transmission?.max_retries ?? 3),
+          retry_delay: Number(c.transmission?.retry_delay ?? 2),
+        };
+        config.rss_modes = c.rss_modes || {};
+
+        const found = enabledModes.value.find(x => x.mode === taskForm.mode);
+        if(!found){
+          taskForm.mode = enabledModes.value.length ? enabledModes.value[0].mode : '';
+        }
+      }
+
+      async function ensureLogin(){
+        const d = await api('/api/user/me');
+        if(!d.success){ location.href='/user/login'; return false; }
+        who.value = `${d.tenant_key} / ${d.tenant_name} / ${d.username}`;
+        return true;
+      }
+
+      async function loadConfig(){
+        const d = await api('/api/user/config');
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '读取配置失败'); return; }
+        normalizeConfig(d.config || {});
+      }
+
+      async function saveConfig(){
+        saving.value = true;
+        const payload = {
+          tenant_name: config.tenant_name,
+          transmission: { ...config.transmission },
+          rss_modes: config.rss_modes,
+        };
+        const d = await api('/api/user/config', {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+        });
+        saving.value = false;
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '保存失败'); return; }
+        ElementPlus.ElMessage.success('配置保存成功');
+        await refreshAll();
+        activeMenu.value = 'main';
+      }
+
+      async function preview(){
+        if(!taskForm.mode){ ElementPlus.ElMessage.warning('没有可用模式'); return; }
+        previewLoading.value = true;
+        const d = await api('/api/user/preview', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode: taskForm.mode })
+        });
+        previewLoading.value = false;
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '预览失败'); return; }
+        previewModeName.value = d.mode_name || taskForm.mode;
+        previewTotal.value = Number(d.count || 0);
+        previewItems.value = (d.items || []).map(it => ({
+          ...it,
+          title: it.title || '',
+          chinese_name: it.chinese_name || ''
+        }));
+        if(previewTotal.value === 0){
+          previewTotal.value = previewItems.value.length;
+        }
+      }
+
+      async function downloadOne(row){
+        if(!taskForm.mode){ ElementPlus.ElMessage.warning('请先选择模式'); return; }
+        if(!row || !row.enclosure_url){ ElementPlus.ElMessage.warning('该条目没有可下载链接'); return; }
+        const d = await api('/api/user/download-one', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            mode: taskForm.mode,
+            url: row.enclosure_url,
+            title: row.chinese_name || row.title || ''
+          })
+        });
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '下载失败'); return; }
+        ElementPlus.ElMessage.success(d.message || '已提交下载');
+        await loadHistory();
+      }
+
+      async function startDownload(){
+        if(!taskForm.mode){ ElementPlus.ElMessage.warning('没有可用模式'); return; }
+        downloadStarting.value = true;
+        const d = await api('/api/user/download', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ mode: taskForm.mode, keywords: taskForm.keywords || '' })
+        });
+        downloadStarting.value = false;
+        if(!d.success){ ElementPlus.ElMessage.error(d.message || '启动失败'); return; }
+        taskId.value = d.task_id || '';
+        progressText.value = '任务已启动，正在处理...';
+        pollProgress();
+      }
+
+      async function pollProgress(){
+        if(!taskId.value) return;
+        const d = await api(`/api/user/progress/${encodeURIComponent(taskId.value)}`);
+        if(d.success){
+          const p = d.progress || {};
+          progressText.value = p.message || p.status || '处理中';
+          if(p.status === 'completed' || p.status === 'error'){
+            taskId.value = '';
+            await loadHistory();
+            return;
+          }
+        }
+        setTimeout(pollProgress, 1000);
+      }
+
+      async function loadHistory(){
+        const d = await api('/api/user/history?limit=30');
+        history.value = d.history || [];
+      }
+
+      async function refreshAll(){
+        await loadConfig();
+        await loadHistory();
+      }
+
+      async function logout(){
+        await api('/api/user/logout', { method:'POST' });
+        location.href = '/user/login';
+      }
+
+      onMounted(async ()=>{
+        const hash = (location.hash || '').replace('#', '');
+        activeMenu.value = hash === 'config' ? 'config' : 'main';
+        if(await ensureLogin()){
+          await refreshAll();
+        }
+      });
+
+      return {
+        who,
+        activeMenu,
+        progressText,
+        previewModeName,
+        previewTotal,
+        previewItems,
+        history,
+        taskForm,
+        config,
+        enabledModes,
+        previewLoading,
+        downloadStarting,
+        saving,
+        refreshAll,
+        logout,
+        preview,
+        startDownload,
+        saveConfig,
+        downloadOne,
+      };
+    }
+  }).use(ElementPlus).mount('#app');
+</script>
+</body>
+</html>
+
+{% endraw %}
+

@@ -1,0 +1,193 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>用户登录 - M-TEAM Downloader</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@latest/dist/index.css" />
+  <style>
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:"Segoe UI","Microsoft YaHei",sans-serif;
+      background:radial-gradient(circle at 20% 20%, #e8f2ff 0%, #f8f9fb 45%, #e8fbf2 100%);
+      display:grid;
+      place-items:center;
+      padding:14px;
+    }
+    .wrap{width:min(460px,100%)}
+    .title{font-size:24px;font-weight:700;color:#1f2937;margin-bottom:4px}
+    .sub{font-size:13px;color:#6b7280;margin-bottom:14px}
+    .hint{font-size:12px;color:#6b7280}
+  </style>
+</head>
+<body>
+<div id="app" class="wrap">
+  <el-card shadow="hover">
+    <div class="title">用户登录</div>
+    <div class="sub">登录后可进入租户控制台，配置 Transmission / RSS 并执行下载任务。</div>
+
+    <el-form label-position="top">
+      <el-form-item label="用户名">
+        <el-input v-model="loginForm.username" placeholder="请输入用户名" />
+      </el-form-item>
+      <el-form-item label="密码">
+        <el-input v-model="loginForm.password" type="password" show-password placeholder="请输入密码" @keyup.enter="doLogin" />
+      </el-form-item>
+      <el-button type="primary" style="width:100%" :loading="loginLoading" @click="doLogin">登录</el-button>
+    </el-form>
+
+    <el-alert v-if="loginMsg" :title="loginMsg" type="error" :closable="false" style="margin-top:10px" />
+
+    <div style="margin-top:12px;text-align:center;">
+      <span class="hint">还没有账号？</span>
+      <el-button type="primary" link @click="openRegister">立即注册</el-button>
+    </div>
+  </el-card>
+
+  <el-dialog v-model="registerVisible" title="租户注册" width="560px" destroy-on-close>
+    <el-form label-position="top">
+      <el-row :gutter="10">
+        <el-col :xs="24" :md="12">
+          <el-form-item label="租户名称">
+            <el-input v-model="registerForm.tenant_name" placeholder="例如：A组" />
+          </el-form-item>
+        </el-col>
+        <el-col :xs="24" :md="12">
+          <el-form-item label="用户名">
+            <el-input v-model="registerForm.username" placeholder="例如：user01" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="10">
+        <el-col :xs="24" :md="12">
+          <el-form-item label="密码">
+            <el-input v-model="registerForm.password" type="password" show-password placeholder="至少 6 位" />
+          </el-form-item>
+        </el-col>
+        <el-col :xs="24" :md="12">
+          <el-form-item label="确认密码">
+            <el-input v-model="registerForm.password2" type="password" show-password placeholder="再次输入密码" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+    </el-form>
+    <el-alert v-if="registerMsg" :title="registerMsg" :type="registerOk ? 'success' : 'error'" :closable="false" />
+    <template #footer>
+      <el-button @click="registerVisible=false">取消</el-button>
+      <el-button type="primary" :loading="registerLoading" @click="doRegister">提交注册</el-button>
+    </template>
+  </el-dialog>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus@latest/dist/index.full.min.js"></script>
+<script>
+  const { createApp, reactive, ref } = Vue;
+
+  createApp({
+    setup(){
+      const loginForm = reactive({ username: 'admin', password: 'yangyang83' });
+      const registerForm = reactive({ tenant_name: '', username: '', password: '', password2: '' });
+      const loginLoading = ref(false);
+      const registerLoading = ref(false);
+      const registerVisible = ref(false);
+      const loginMsg = ref('');
+      const registerMsg = ref('');
+      const registerOk = ref(false);
+
+      async function api(url, options={}){
+        const r = await fetch(url, options);
+        return await r.json();
+      }
+
+      async function doLogin(){
+        loginMsg.value = '';
+        if(!loginForm.username.trim() || !loginForm.password){
+          loginMsg.value = '请输入用户名和密码';
+          return;
+        }
+        loginLoading.value = true;
+        const d = await api('/api/user/login', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ username: loginForm.username.trim(), password: loginForm.password })
+        });
+        loginLoading.value = false;
+        if(!d.success){ loginMsg.value = d.message || '登录失败'; return; }
+        location.href = d.next || '/user/dashboard';
+      }
+
+      function openRegister(){
+        registerVisible.value = true;
+        registerMsg.value = '';
+        registerOk.value = false;
+      }
+
+      async function doRegister(){
+        registerMsg.value = '';
+        registerOk.value = false;
+
+        if(!registerForm.tenant_name.trim()){
+          registerMsg.value = '租户名称不能为空';
+          return;
+        }
+        if(!registerForm.username.trim()){
+          registerMsg.value = '用户名不能为空';
+          return;
+        }
+        if((registerForm.password || '').length < 6){
+          registerMsg.value = '密码至少 6 位';
+          return;
+        }
+        if(registerForm.password !== registerForm.password2){
+          registerMsg.value = '两次输入密码不一致';
+          return;
+        }
+
+        registerLoading.value = true;
+        const d = await api('/api/user/register', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            tenant_name: registerForm.tenant_name.trim(),
+            username: registerForm.username.trim(),
+            password: registerForm.password
+          })
+        });
+        registerLoading.value = false;
+
+        if(!d.success){
+          registerMsg.value = d.message || '注册失败';
+          return;
+        }
+
+        registerOk.value = true;
+        registerMsg.value = '注册成功，正在自动登录...';
+        loginForm.username = registerForm.username.trim();
+        loginForm.password = registerForm.password;
+
+        setTimeout(async ()=>{
+          registerVisible.value = false;
+          await doLogin();
+        }, 500);
+      }
+
+      return {
+        loginForm,
+        registerForm,
+        loginLoading,
+        registerLoading,
+        registerVisible,
+        loginMsg,
+        registerMsg,
+        registerOk,
+        doLogin,
+        openRegister,
+        doRegister,
+      };
+    }
+  }).use(ElementPlus).mount('#app');
+</script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>管理员登录 - M-TEAM Downloader</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@latest/dist/index.css" />
+  <style>
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:"Segoe UI","Microsoft YaHei",sans-serif;
+      background:radial-gradient(circle at 20% 20%, #f0f4ff 0%, #f7f8fb 48%, #eef7ff 100%);
+      display:grid;
+      place-items:center;
+      padding:14px;
+    }
+    .wrap{width:min(460px,100%)}
+    .title{font-size:24px;font-weight:700;color:#1f2937;margin-bottom:4px}
+    .sub{font-size:13px;color:#6b7280;margin-bottom:14px}
+  </style>
+</head>
+<body>
+<div id="app" class="wrap">
+  <el-card shadow="hover">
+    <div class="title">管理员后台登录</div>
+    <div class="sub">默认账号：admin / yangyang83</div>
+
+    <el-form label-position="top">
+      <el-form-item label="管理员账号">
+        <el-input v-model="form.username" placeholder="请输入管理员账号" />
+      </el-form-item>
+      <el-form-item label="密码">
+        <el-input v-model="form.password" type="password" show-password placeholder="请输入密码" @keyup.enter="login" />
+      </el-form-item>
+      <el-button type="primary" style="width:100%" :loading="loading" @click="login">登录后台</el-button>
+    </el-form>
+
+    <el-alert v-if="msg" :title="msg" type="error" :closable="false" style="margin-top:10px" />
+  </el-card>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus@latest/dist/index.full.min.js"></script>
+<script>
+  const { createApp, reactive, ref } = Vue;
+
+  createApp({
+    setup(){
+      const form = reactive({ username: 'admin', password: 'yangyang83' });
+      const loading = ref(false);
+      const msg = ref('');
+
+      async function api(url, options={}){const r=await fetch(url, options); return await r.json();}
+
+      async function login(){
+        msg.value = '';
+        if(!form.username.trim() || !form.password){
+          msg.value = '请输入账号和密码';
+          return;
+        }
+        loading.value = true;
+        const d = await api('/api/admin/login', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ username: form.username.trim(), password: form.password })
+        });
+        loading.value = false;
+        if(!d.success){ msg.value = d.message || '登录失败'; return; }
+        location.href = d.next || '/admin/dashboard';
+      }
+
+      return { form, loading, msg, login };
+    }
+  }).use(ElementPlus).mount('#app');
+</script>
+</body>
+</html>
