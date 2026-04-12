@@ -31,6 +31,7 @@
         <div class="head-sub">{{ adminWho }}</div>
       </div>
       <div style="display:flex;gap:8px;">
+        <el-button type="warning" plain @click="openPasswordDialog">账号安全</el-button>
         <el-button @click="refreshAll">刷新</el-button>
         <el-button type="danger" plain @click="logout">退出登录</el-button>
       </div>
@@ -96,12 +97,42 @@
       <el-table-column prop="created_at" label="时间" width="180" />
     </el-table>
   </el-card>
+
+  <el-dialog v-model="passwordDialogVisible" title="账号安全" width="560px" @closed="resetPasswordForm">
+    <div class="head-sub" style="margin-bottom:8px;">可同步默认租户（default/admin）密码，便于统一维护。</div>
+    <el-form label-position="top">
+      <el-row :gutter="10">
+        <el-col :xs="24" :md="8">
+          <el-form-item label="旧密码">
+            <el-input v-model="passwordForm.old_password" type="password" show-password placeholder="请输入当前密码" />
+          </el-form-item>
+        </el-col>
+        <el-col :xs="24" :md="8">
+          <el-form-item label="新密码">
+            <el-input v-model="passwordForm.new_password" type="password" show-password placeholder="至少 6 位" />
+          </el-form-item>
+        </el-col>
+        <el-col :xs="24" :md="8">
+          <el-form-item label="确认新密码">
+            <el-input v-model="passwordForm.confirm_password" type="password" show-password placeholder="再次输入新密码" @keyup.enter="changePassword" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-form-item>
+        <el-checkbox v-model="syncDefaultTenantPassword">同步默认租户 default/admin 密码</el-checkbox>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="passwordDialogVisible=false">取消</el-button>
+      <el-button type="primary" :loading="changingPassword" @click="changePassword">确认修改</el-button>
+    </template>
+  </el-dialog>
 </div>
 
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <script src="https://unpkg.com/element-plus@latest/dist/index.full.min.js"></script>
 <script>
-  const { createApp, ref, onMounted } = Vue;
+  const { createApp, reactive, ref, onMounted } = Vue;
 
   createApp({
     setup(){
@@ -112,6 +143,14 @@
       const tenantLoading = ref(false);
       const auditLoading = ref(false);
       const migrateLoading = ref(false);
+      const passwordDialogVisible = ref(false);
+      const changingPassword = ref(false);
+      const syncDefaultTenantPassword = ref(true);
+      const passwordForm = reactive({
+        old_password: '',
+        new_password: '',
+        confirm_password: '',
+      });
 
       const migrateTenant = ref('default');
 
@@ -202,6 +241,60 @@
         catch(_) { return '{}'; }
       }
 
+      function resetPasswordForm(){
+        passwordForm.old_password = '';
+        passwordForm.new_password = '';
+        passwordForm.confirm_password = '';
+        syncDefaultTenantPassword.value = true;
+      }
+
+      function openPasswordDialog(){
+        resetPasswordForm();
+        passwordDialogVisible.value = true;
+      }
+
+      async function changePassword(){
+        if(!passwordForm.old_password){
+          ElementPlus.ElMessage.warning('旧密码不能为空');
+          return;
+        }
+        if((passwordForm.new_password || '').length < 6){
+          ElementPlus.ElMessage.warning('新密码至少 6 位');
+          return;
+        }
+        if(passwordForm.new_password !== passwordForm.confirm_password){
+          ElementPlus.ElMessage.warning('两次输入的新密码不一致');
+          return;
+        }
+        if(passwordForm.old_password === passwordForm.new_password){
+          ElementPlus.ElMessage.warning('新密码不能与旧密码相同');
+          return;
+        }
+
+        changingPassword.value = true;
+        const d = await api('/api/admin/password', {
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            old_password: passwordForm.old_password,
+            new_password: passwordForm.new_password,
+            confirm_password: passwordForm.confirm_password,
+            sync_default_tenant: syncDefaultTenantPassword.value,
+          })
+        });
+        changingPassword.value = false;
+
+        if(!d.success){
+          ElementPlus.ElMessage.error(d.message || '密码修改失败');
+          return;
+        }
+
+        const synced = d.default_tenant_synced ? '，已同步默认租户密码' : '';
+        ElementPlus.ElMessage.success(`管理员密码修改成功${synced}`);
+        passwordDialogVisible.value = false;
+        resetPasswordForm();
+      }
+
       async function refreshAll(){
         await loadTenants();
         await loadAudits(selectedTenant.value || 'default');
@@ -224,6 +317,10 @@
         tenantLoading,
         auditLoading,
         migrateLoading,
+        passwordDialogVisible,
+        changingPassword,
+        syncDefaultTenantPassword,
+        passwordForm,
         migrateTenant,
         setStatus,
         delTenant,
@@ -231,6 +328,9 @@
         loadAudits,
         migrateHistory,
         formatDetail,
+        resetPasswordForm,
+        openPasswordDialog,
+        changePassword,
         refreshAll,
         logout,
       };

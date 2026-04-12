@@ -362,6 +362,52 @@ def api_user_change_password():
         return jsonify({"success": False, "message": str(exc)})
 
 
+@app.route("/api/admin/password", methods=["PUT"])
+def api_admin_change_password():
+    err = require_admin_json()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    old_password = str(data.get("old_password") or "")
+    new_password = str(data.get("new_password") or "")
+    confirm_password = str(data.get("confirm_password") or "")
+    sync_raw = data.get("sync_default_tenant", True)
+    if isinstance(sync_raw, bool):
+        sync_default_tenant = sync_raw
+    else:
+        sync_default_tenant = str(sync_raw).strip().lower() in {"1", "true", "yes", "on"}
+
+    if not old_password:
+        return jsonify({"success": False, "message": "旧密码不能为空"})
+    if len(new_password) < 6:
+        return jsonify({"success": False, "message": "新密码至少 6 位"})
+    if new_password != confirm_password:
+        return jsonify({"success": False, "message": "两次输入的新密码不一致"})
+    if old_password == new_password:
+        return jsonify({"success": False, "message": "新密码不能与旧密码相同"})
+
+    try:
+        result = store.change_admin_password(
+            username=str(session.get("username") or ""),
+            old_password=old_password,
+            new_password=new_password,
+            sync_default_tenant=sync_default_tenant,
+            default_tenant_key=Settings.DEFAULT_TENANT_KEY,
+            default_tenant_username=Settings.DEFAULT_TENANT_USERNAME,
+            actor=current_actor(),
+        )
+        return jsonify(
+            {
+                "success": True,
+                "message": "管理员密码修改成功",
+                "default_tenant_synced": bool(result.get("default_tenant_synced")),
+            }
+        )
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)})
+
+
 @app.route("/api/user/status", methods=["GET"])
 def api_user_status():
     err = require_user_json()

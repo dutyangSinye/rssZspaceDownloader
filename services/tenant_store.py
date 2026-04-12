@@ -426,6 +426,84 @@ class TenantStore:
                 detail={"username": normalized_user},
             )
 
+    def change_admin_password(
+        self,
+        username: str,
+        old_password: str,
+        new_password: str,
+        sync_default_tenant: bool = True,
+        default_tenant_key: str = "default",
+        default_tenant_username: str = "admin",
+        actor: str = "system",
+    ) -> Dict[str, Any]:
+        normalized_user = (username or "").strip()
+        normalized_tenant_key = (default_tenant_key or "default").strip().lower() or "default"
+        normalized_tenant_user = (default_tenant_username or "admin").strip() or "admin"
+
+        if not normalized_user:
+            raise ValueError("管理员账号无效")
+        if len(new_password or "") < 6:
+            raise ValueError("新密码至少 6 位")
+
+        with self._lock, self._connect() as conn:
+            admin_row = conn.execute(
+                """
+                SELECT id, password_hash, account_status
+                FROM admin_accounts
+                WHERE username = ?
+                LIMIT 1
+                """,
+                (normalized_user,),
+            ).fetchone()
+            if admin_row is None:
+                raise ValueError("管理员账号不存在")
+            if admin_row["account_status"] != "active":
+                raise ValueError("管理员账号已停用")
+            if not check_password_hash(admin_row["password_hash"], old_password or ""):
+                raise ValueError("旧密码错误")
+
+            now = self._now()
+            conn.execute(
+                "UPDATE admin_accounts SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (generate_password_hash(new_password), now, int(admin_row["id"])),
+            )
+
+            result = {"admin_updated": True, "default_tenant_synced": False}
+            if not sync_default_tenant:
+                return result
+
+            tenant_row = self._get_tenant_row(conn, normalized_tenant_key)
+            if tenant_row is None:
+                raise ValueError(f"默认租户不存在: {normalized_tenant_key}")
+            tenant_id = int(tenant_row["id"])
+            tenant_user_row = conn.execute(
+                """
+                SELECT id, account_status
+                FROM tenant_users
+                WHERE tenant_id = ? AND username = ?
+                LIMIT 1
+                """,
+                (tenant_id, normalized_tenant_user),
+            ).fetchone()
+            if tenant_user_row is None:
+                raise ValueError(f"默认租户账号不存在: {normalized_tenant_user}")
+            if tenant_user_row["account_status"] != "active":
+                raise ValueError("默认租户账号已停用，无法同步密码")
+
+            conn.execute(
+                "UPDATE tenant_users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (generate_password_hash(new_password), now, int(tenant_user_row["id"])),
+            )
+            self._log_audit(
+                conn,
+                tenant_id,
+                action="admin.password.sync_default_tenant",
+                actor=actor,
+                detail={"admin_username": normalized_user, "username": normalized_tenant_user},
+            )
+            result["default_tenant_synced"] = True
+            return result
+
     def register_tenant_with_user(
         self,
         tenant_key: str,
