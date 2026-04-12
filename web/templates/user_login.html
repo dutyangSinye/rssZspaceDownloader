@@ -4,190 +4,343 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>用户登录 - M-TEAM Downloader</title>
-  <link rel="stylesheet" href="https://unpkg.com/element-plus@latest/dist/index.css" />
   <style>
+    :root{
+      --bg-1:#f4f8ff;
+      --bg-2:#eefbf4;
+      --card:#ffffff;
+      --text:#111827;
+      --muted:#6b7280;
+      --primary:#1677ff;
+      --success:#16a34a;
+      --border:#e5e7eb;
+      --danger:#dc2626;
+    }
+    *{box-sizing:border-box}
     body{
       margin:0;
       min-height:100vh;
       font-family:"Segoe UI","Microsoft YaHei",sans-serif;
-      background:radial-gradient(circle at 20% 20%, #e8f2ff 0%, #f8f9fb 45%, #e8fbf2 100%);
+      color:var(--text);
+      background:radial-gradient(circle at 20% 20%, var(--bg-1) 0%, #f8f9fb 45%, var(--bg-2) 100%);
       display:grid;
       place-items:center;
       padding:14px;
     }
     .wrap{width:min(460px,100%)}
-    .title{font-size:24px;font-weight:700;color:#1f2937;margin-bottom:4px}
-    .sub{font-size:13px;color:#6b7280;margin-bottom:14px}
-    .hint{font-size:12px;color:#6b7280}
+    .card{
+      background:var(--card);
+      border:1px solid rgba(15,23,42,.06);
+      border-radius:16px;
+      box-shadow:0 10px 30px rgba(15,23,42,.08);
+      padding:20px;
+    }
+    .title{font-size:24px;font-weight:700;margin-bottom:4px}
+    .sub{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+    .field{margin-bottom:12px}
+    .field label{display:block;font-size:13px;margin-bottom:6px;color:#374151}
+    .input{
+      width:100%;
+      height:40px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:0 12px;
+      outline:none;
+      font-size:14px;
+      background:#fff;
+    }
+    .input:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+    .btn{
+      width:100%;
+      height:40px;
+      border:0;
+      border-radius:10px;
+      color:#fff;
+      background:var(--primary);
+      font-size:14px;
+      cursor:pointer;
+    }
+    .btn:disabled{opacity:.65;cursor:not-allowed}
+    .btn-link{
+      border:0;
+      background:transparent;
+      color:var(--success);
+      cursor:pointer;
+      font-size:13px;
+      padding:0 4px;
+    }
+    .muted{font-size:12px;color:var(--muted)}
+    .center{margin-top:12px;text-align:center}
+    .alert{
+      margin-top:10px;
+      padding:9px 10px;
+      border-radius:8px;
+      font-size:13px;
+      border:1px solid #fecaca;
+      background:#fff1f2;
+      color:var(--danger);
+      display:none;
+      line-height:1.4;
+    }
+    .ok{
+      border-color:#bbf7d0;
+      background:#f0fdf4;
+      color:#166534;
+    }
+
+    .modal-mask{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.35);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:1000;
+      padding:12px;
+    }
+    .modal{
+      width:min(560px,100%);
+      background:#fff;
+      border-radius:14px;
+      box-shadow:0 20px 50px rgba(0,0,0,.2);
+      overflow:hidden;
+    }
+    .modal-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:14px 16px;
+      border-bottom:1px solid var(--border);
+      font-weight:700;
+    }
+    .x{
+      border:0;
+      background:transparent;
+      font-size:20px;
+      line-height:1;
+      cursor:pointer;
+      color:#6b7280;
+    }
+    .modal-body{padding:14px 16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .modal-foot{
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      padding:12px 16px;
+      border-top:1px solid var(--border);
+      background:#fafafa;
+    }
+    .btn-ghost{
+      min-width:88px;
+      height:36px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:#fff;
+      cursor:pointer;
+    }
+    .btn-success{
+      min-width:110px;
+      height:36px;
+      border:0;
+      border-radius:8px;
+      color:#fff;
+      background:var(--success);
+      cursor:pointer;
+    }
+    .btn-success:disabled{opacity:.65;cursor:not-allowed}
+    @media (max-width:680px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
-<div id="app" class="wrap">
-  <el-card shadow="hover">
+<div class="wrap">
+  <div class="card">
     <div class="title">用户登录</div>
     <div class="sub">登录后可进入租户控制台，配置 Transmission / RSS 并执行下载任务。</div>
 
-    <el-form label-position="top">
-      <el-form-item label="用户名">
-        <el-input v-model="loginForm.username" placeholder="请输入用户名" />
-      </el-form-item>
-      <el-form-item label="密码">
-        <el-input v-model="loginForm.password" type="password" show-password placeholder="请输入密码" @keyup.enter="doLogin" />
-      </el-form-item>
-      <el-button type="primary" style="width:100%" :loading="loginLoading" @click="doLogin">登录</el-button>
-    </el-form>
-
-    <el-alert v-if="loginMsg" :title="loginMsg" type="error" :closable="false" style="margin-top:10px" />
-
-    <div style="margin-top:12px;text-align:center;">
-      <span class="hint">还没有账号？</span>
-      <el-button type="primary" link @click="openRegister">立即注册</el-button>
+    <div class="field">
+      <label for="login-username">用户名</label>
+      <input id="login-username" class="input" placeholder="请输入用户名" />
     </div>
-  </el-card>
+    <div class="field">
+      <label for="login-password">密码</label>
+      <input id="login-password" class="input" type="password" placeholder="请输入密码" />
+    </div>
 
-  <el-dialog v-model="registerVisible" title="租户注册" width="560px" destroy-on-close>
-    <el-form label-position="top">
-      <el-row :gutter="10">
-        <el-col :xs="24" :md="12">
-          <el-form-item label="租户名称">
-            <el-input v-model="registerForm.tenant_name" placeholder="例如：A组" />
-          </el-form-item>
-        </el-col>
-        <el-col :xs="24" :md="12">
-          <el-form-item label="用户名">
-            <el-input v-model="registerForm.username" placeholder="例如：user01" />
-          </el-form-item>
-        </el-col>
-      </el-row>
-      <el-row :gutter="10">
-        <el-col :xs="24" :md="12">
-          <el-form-item label="密码">
-            <el-input v-model="registerForm.password" type="password" show-password placeholder="至少 6 位" />
-          </el-form-item>
-        </el-col>
-        <el-col :xs="24" :md="12">
-          <el-form-item label="确认密码">
-            <el-input v-model="registerForm.password2" type="password" show-password placeholder="再次输入密码" />
-          </el-form-item>
-        </el-col>
-      </el-row>
-    </el-form>
-    <el-alert v-if="registerMsg" :title="registerMsg" :type="registerOk ? 'success' : 'error'" :closable="false" />
-    <template #footer>
-      <el-button @click="registerVisible=false">取消</el-button>
-      <el-button type="primary" :loading="registerLoading" @click="doRegister">提交注册</el-button>
-    </template>
-  </el-dialog>
+    <button id="btn-login" class="btn" type="button">登录</button>
+    <div id="login-msg" class="alert"></div>
+
+    <div class="center">
+      <span class="muted">还没有账号？</span>
+      <button id="btn-open-register" class="btn-link" type="button">注册新租户</button>
+    </div>
+  </div>
 </div>
 
-<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-<script src="https://unpkg.com/element-plus@latest/dist/index.full.min.js"></script>
+<div id="register-mask" class="modal-mask" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="租户注册">
+    <div class="modal-head">
+      <span>租户注册</span>
+      <button id="btn-close-register-x" class="x" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid">
+        <div class="field">
+          <label for="reg-tenant-name">租户名称</label>
+          <input id="reg-tenant-name" class="input" placeholder="例如：A组" />
+        </div>
+        <div class="field">
+          <label for="reg-username">用户名</label>
+          <input id="reg-username" class="input" placeholder="例如：user01" />
+        </div>
+        <div class="field">
+          <label for="reg-password">密码</label>
+          <input id="reg-password" class="input" type="password" placeholder="至少 6 位" />
+        </div>
+        <div class="field">
+          <label for="reg-password2">确认密码</label>
+          <input id="reg-password2" class="input" type="password" placeholder="再次输入密码" />
+        </div>
+      </div>
+      <div id="register-msg" class="alert"></div>
+    </div>
+    <div class="modal-foot">
+      <button id="btn-close-register" class="btn-ghost" type="button">取消</button>
+      <button id="btn-submit-register" class="btn-success" type="button">提交注册</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  const { createApp, reactive, ref } = Vue;
+  (function(){
+    const $ = (id) => document.getElementById(id);
 
-  createApp({
-    setup(){
-      const loginForm = reactive({ username: 'admin', password: 'yangyang83' });
-      const registerForm = reactive({ tenant_name: '', username: '', password: '', password2: '' });
-      const loginLoading = ref(false);
-      const registerLoading = ref(false);
-      const registerVisible = ref(false);
-      const loginMsg = ref('');
-      const registerMsg = ref('');
-      const registerOk = ref(false);
+    const loginUsername = $('login-username');
+    const loginPassword = $('login-password');
+    const loginBtn = $('btn-login');
+    const loginMsg = $('login-msg');
 
-      async function api(url, options={}){
-        const r = await fetch(url, options);
-        return await r.json();
-      }
+    const openRegisterBtn = $('btn-open-register');
+    const registerMask = $('register-mask');
+    const closeRegisterBtn = $('btn-close-register');
+    const closeRegisterXBtn = $('btn-close-register-x');
+    const submitRegisterBtn = $('btn-submit-register');
 
-      async function doLogin(){
-        loginMsg.value = '';
-        if(!loginForm.username.trim() || !loginForm.password){
-          loginMsg.value = '请输入用户名和密码';
-          return;
-        }
-        loginLoading.value = true;
-        const d = await api('/api/user/login', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ username: loginForm.username.trim(), password: loginForm.password })
-        });
-        loginLoading.value = false;
-        if(!d.success){ loginMsg.value = d.message || '登录失败'; return; }
-        location.href = d.next || '/user/dashboard';
-      }
+    const regTenant = $('reg-tenant-name');
+    const regUsername = $('reg-username');
+    const regPassword = $('reg-password');
+    const regPassword2 = $('reg-password2');
+    const registerMsg = $('register-msg');
 
-      function openRegister(){
-        registerVisible.value = true;
-        registerMsg.value = '';
-        registerOk.value = false;
-      }
-
-      async function doRegister(){
-        registerMsg.value = '';
-        registerOk.value = false;
-
-        if(!registerForm.tenant_name.trim()){
-          registerMsg.value = '租户名称不能为空';
-          return;
-        }
-        if(!registerForm.username.trim()){
-          registerMsg.value = '用户名不能为空';
-          return;
-        }
-        if((registerForm.password || '').length < 6){
-          registerMsg.value = '密码至少 6 位';
-          return;
-        }
-        if(registerForm.password !== registerForm.password2){
-          registerMsg.value = '两次输入密码不一致';
-          return;
-        }
-
-        registerLoading.value = true;
-        const d = await api('/api/user/register', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            tenant_name: registerForm.tenant_name.trim(),
-            username: registerForm.username.trim(),
-            password: registerForm.password
-          })
-        });
-        registerLoading.value = false;
-
-        if(!d.success){
-          registerMsg.value = d.message || '注册失败';
-          return;
-        }
-
-        registerOk.value = true;
-        registerMsg.value = '注册成功，正在自动登录...';
-        loginForm.username = registerForm.username.trim();
-        loginForm.password = registerForm.password;
-
-        setTimeout(async ()=>{
-          registerVisible.value = false;
-          await doLogin();
-        }, 500);
-      }
-
-      return {
-        loginForm,
-        registerForm,
-        loginLoading,
-        registerLoading,
-        registerVisible,
-        loginMsg,
-        registerMsg,
-        registerOk,
-        doLogin,
-        openRegister,
-        doRegister,
-      };
+    function showMsg(el, text, ok){
+      el.textContent = text || '';
+      el.style.display = text ? 'block' : 'none';
+      el.classList.toggle('ok', !!ok);
     }
-  }).use(ElementPlus).mount('#app');
+
+    async function api(url, payload){
+      const resp = await fetch(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload || {})
+      });
+      const text = await resp.text();
+      let data;
+      try{ data = JSON.parse(text); }catch(_e){ throw new Error('接口响应异常(' + resp.status + ')'); }
+      return {resp, data};
+    }
+
+    function openRegister(){
+      showMsg(registerMsg, '', false);
+      registerMask.style.display = 'flex';
+      registerMask.setAttribute('aria-hidden', 'false');
+      setTimeout(()=>regTenant.focus(), 0);
+    }
+
+    function closeRegister(){
+      registerMask.style.display = 'none';
+      registerMask.setAttribute('aria-hidden', 'true');
+    }
+
+    async function doLogin(tenantKey){
+      showMsg(loginMsg, '', false);
+      const username = (loginUsername.value || '').trim();
+      const password = loginPassword.value || '';
+      if(!username || !password){
+        showMsg(loginMsg, '请输入用户名和密码', false);
+        return;
+      }
+
+      const payload = { username, password };
+      if(tenantKey){ payload.tenant_key = tenantKey; }
+
+      loginBtn.disabled = true;
+      loginBtn.textContent = '登录中...';
+      try{
+        const { data } = await api('/api/user/login', payload);
+        if(!data.success){
+          showMsg(loginMsg, data.message || '登录失败', false);
+          return;
+        }
+        location.href = data.next || '/user/dashboard';
+      }catch(e){
+        showMsg(loginMsg, e.message || '登录接口异常', false);
+      }finally{
+        loginBtn.disabled = false;
+        loginBtn.textContent = '登录';
+      }
+    }
+
+    async function doRegister(){
+      showMsg(registerMsg, '', false);
+      const tenantName = (regTenant.value || '').trim();
+      const username = (regUsername.value || '').trim();
+      const password = regPassword.value || '';
+      const password2 = regPassword2.value || '';
+
+      if(!tenantName){ showMsg(registerMsg, '租户名称不能为空', false); return; }
+      if(!username){ showMsg(registerMsg, '用户名不能为空', false); return; }
+      if(password.length < 6){ showMsg(registerMsg, '密码至少 6 位', false); return; }
+      if(password !== password2){ showMsg(registerMsg, '两次输入密码不一致', false); return; }
+
+      submitRegisterBtn.disabled = true;
+      submitRegisterBtn.textContent = '提交中...';
+      try{
+        const { data } = await api('/api/user/register', { tenant_name: tenantName, username, password });
+        if(!data.success){
+          showMsg(registerMsg, data.message || '注册失败', false);
+          return;
+        }
+        showMsg(registerMsg, '注册成功，正在自动登录...', true);
+        loginUsername.value = username;
+        loginPassword.value = password;
+        const tenantKey = data.tenant && data.tenant.tenant_key ? data.tenant.tenant_key : '';
+        setTimeout(async ()=>{
+          closeRegister();
+          await doLogin(tenantKey);
+        }, 450);
+      }catch(e){
+        showMsg(registerMsg, e.message || '注册接口异常', false);
+      }finally{
+        submitRegisterBtn.disabled = false;
+        submitRegisterBtn.textContent = '提交注册';
+      }
+    }
+
+    loginBtn.addEventListener('click', ()=>doLogin(''));
+    loginPassword.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ doLogin(''); } });
+
+    openRegisterBtn.addEventListener('click', openRegister);
+    closeRegisterBtn.addEventListener('click', closeRegister);
+    closeRegisterXBtn.addEventListener('click', closeRegister);
+    registerMask.addEventListener('click', (e)=>{ if(e.target === registerMask){ closeRegister(); } });
+    submitRegisterBtn.addEventListener('click', doRegister);
+    regPassword2.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ doRegister(); } });
+
+    window.addEventListener('keydown', (e)=>{
+      if(e.key === 'Escape' && registerMask.style.display === 'flex') closeRegister();
+    });
+  })();
 </script>
 </body>
 </html>

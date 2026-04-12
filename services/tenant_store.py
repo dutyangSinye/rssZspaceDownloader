@@ -241,10 +241,10 @@ class TenantStore:
     def ensure_default_identities(
         self,
         admin_username: str = "admin",
-        admin_password: str = "yangyang83",
+        admin_password: str = "admin",
         tenant_key: str = "default",
         tenant_username: str = "admin",
-        tenant_password: str = "yangyang83",
+        tenant_password: str = "admin",
     ):
         admin_username = (admin_username or "admin").strip()
         tenant_key = (tenant_key or "default").strip().lower() or "default"
@@ -376,13 +376,63 @@ class TenantStore:
                 "user_role": str(row["user_role"]),
             }
 
+    def change_tenant_user_password(
+        self,
+        tenant_key: str,
+        username: str,
+        old_password: str,
+        new_password: str,
+        actor: str = "system",
+    ):
+        normalized_tenant = (tenant_key or "").strip().lower()
+        normalized_user = (username or "").strip()
+        if not normalized_tenant or not normalized_user:
+            raise ValueError("账号信息无效")
+        if len(new_password or "") < 6:
+            raise ValueError("新密码至少 6 位")
+
+        with self._lock, self._connect() as conn:
+            tenant_row = self._get_tenant_row(conn, normalized_tenant)
+            if tenant_row is None:
+                raise ValueError("租户不存在")
+            tenant_id = int(tenant_row["id"])
+
+            user_row = conn.execute(
+                """
+                SELECT id, password_hash, account_status
+                FROM tenant_users
+                WHERE tenant_id = ? AND username = ?
+                LIMIT 1
+                """,
+                (tenant_id, normalized_user),
+            ).fetchone()
+            if user_row is None:
+                raise ValueError("用户不存在")
+            if user_row["account_status"] != "active":
+                raise ValueError("用户已停用")
+            if not check_password_hash(user_row["password_hash"], old_password or ""):
+                raise ValueError("旧密码错误")
+
+            now = self._now()
+            conn.execute(
+                "UPDATE tenant_users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (generate_password_hash(new_password), now, int(user_row["id"])),
+            )
+            self._log_audit(
+                conn,
+                tenant_id,
+                action="tenant.user.password.change",
+                actor=actor,
+                detail={"username": normalized_user},
+            )
+
     def register_tenant_with_user(
         self,
         tenant_key: str,
         tenant_name: str,
         username: str,
         password: str,
-        copy_from: str = "default",
+        copy_from: str = "",
         actor: str = "self-register",
     ) -> Dict[str, Any]:
         normalized_user = (username or "").strip()
@@ -424,7 +474,7 @@ class TenantStore:
         tenant_name: str,
         owner_username: str,
         owner_password: str,
-        copy_from: str = "default",
+        copy_from: str = "",
         actor: str = "self-register",
     ) -> Dict[str, Any]:
         # Backward-compatible alias for previous API naming.
@@ -460,8 +510,20 @@ class TenantStore:
             if new_tenant_id is None:
                 raise ValueError("创建租户失败")
 
-            transmission = (template or {}).get("transmission", DEFAULT_TRANSMISSION)
-            rss_modes = (template or {}).get("rss_modes", DEFAULT_RSS_MODES)
+            if template is None:
+                # Create a clean tenant profile when not copying from another tenant.
+                transmission = {
+                    "host": "",
+                    "username": "",
+                    "password": "",
+                    "request_timeout": DEFAULT_TRANSMISSION["request_timeout"],
+                    "max_retries": DEFAULT_TRANSMISSION["max_retries"],
+                    "retry_delay": DEFAULT_TRANSMISSION["retry_delay"],
+                }
+                rss_modes = {}
+            else:
+                transmission = (template or {}).get("transmission", DEFAULT_TRANSMISSION)
+                rss_modes = (template or {}).get("rss_modes", DEFAULT_RSS_MODES)
             for key, value in transmission.items():
                 self._upsert_config(conn, new_tenant_id, key, str(value))
             for mode, mode_data in rss_modes.items():

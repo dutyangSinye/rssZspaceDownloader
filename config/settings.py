@@ -30,10 +30,10 @@ class Settings:
     LOG_FILE: str = "logs/app.log"
 
     DEFAULT_ADMIN_USERNAME: str = "admin"
-    DEFAULT_ADMIN_PASSWORD: str = "yangyang83"
+    DEFAULT_ADMIN_PASSWORD: str = "admin"
     DEFAULT_TENANT_KEY: str = "default"
     DEFAULT_TENANT_USERNAME: str = "admin"
-    DEFAULT_TENANT_PASSWORD: str = "yangyang83"
+    DEFAULT_TENANT_PASSWORD: str = "admin"
 
     # Bootstrap defaults for first-time DB initialization.
     TRANSMISSION_HOST: str = "http://localhost:9091"

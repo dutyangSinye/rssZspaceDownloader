@@ -64,10 +64,67 @@ class MultiTenantDownloadService:
     def fetch_rss_items(self, tenant_key: str, mode: str) -> List[RSSItem]:
         mode_cfg = self._mode_config(tenant_key, mode)
         client = self._tenant_client(tenant_key)
-        response = requests.get(mode_cfg["rss_url"], timeout=client.request_timeout)
-        response.encoding = "utf-8"
-        parsed = self.rss_parser.parse(response.text)
+        rss_url = str(mode_cfg["rss_url"]).strip()
+        parsed = self.rss_parser.parse(self._fetch_rss_text(rss_url, client.request_timeout, client.max_retries, client.retry_delay))
         return [RSSItem(**item) for item in parsed]
+
+    @staticmethod
+    def _candidate_rss_urls(url: str) -> List[str]:
+        raw = (url or "").strip()
+        if not raw:
+            return []
+
+        urls: List[str] = [raw]
+        # M-Team RSS occasionally resets plain HTTP connections; prefer HTTPS.
+        if raw.startswith("http://rss.m-team.cc/"):
+            https_url = "https://" + raw[len("http://") :]
+            urls = [https_url, raw]
+        return urls
+
+    @staticmethod
+    def _rss_headers() -> Dict[str, str]:
+        return {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
+            "Connection": "close",
+        }
+
+    def _fetch_rss_text(self, rss_url: str, timeout: int, max_retries: int, retry_delay: int) -> str:
+        candidates = self._candidate_rss_urls(rss_url)
+        if not candidates:
+            raise ValueError("RSS URL 不能为空")
+
+        attempts = max(1, int(max_retries))
+        last_exc: Optional[Exception] = None
+        last_status_error = ""
+
+        session = requests.Session()
+        for url in candidates:
+            for idx in range(attempts):
+                try:
+                    resp = session.get(url, timeout=max(3, int(timeout)), headers=self._rss_headers())
+                    resp.raise_for_status()
+                    # Respect server-provided encoding first.
+                    if not resp.encoding:
+                        resp.encoding = resp.apparent_encoding or "utf-8"
+                    return resp.text
+                except requests.HTTPError as exc:
+                    status = getattr(exc.response, "status_code", "unknown")
+                    last_status_error = f"RSS HTTP 状态异常: {status}"
+                    last_exc = exc
+                    # 4xx normally won't recover by retrying same URL.
+                    if isinstance(status, int) and 400 <= status < 500:
+                        break
+                except requests.RequestException as exc:
+                    last_exc = exc
+
+                if idx < attempts - 1:
+                    time.sleep(max(0, int(retry_delay)))
+
+        if last_status_error:
+            raise ValueError(last_status_error)
+        raise ValueError(f"RSS 连接失败: {last_exc or 'unknown error'}")
 
     def add_single_torrent(self, tenant_key: str, mode: str, url: str, title: str = "") -> Dict:
         config = self.tenant_store.get_tenant_config(tenant_key)

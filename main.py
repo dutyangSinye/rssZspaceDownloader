@@ -179,7 +179,9 @@ def api_user_register():
     tenant_name = (data.get("tenant_name") or "").strip()
     username = (data.get("username") or "").strip()
     password = str(data.get("password") or "")
-    copy_from = (data.get("copy_from") or "default").strip().lower() or "default"
+    # Self-register tenants should start from clean configuration.
+    # Admin-side creation can still explicitly pass copy_from=default.
+    copy_from = (data.get("copy_from") or "").strip().lower()
 
     tenant_key = raw_tenant_key or auto_generate_tenant_key(tenant_name or username)
     if not tenant_name:
@@ -230,7 +232,11 @@ def api_user_login():
         if tenant_key:
             login = store.verify_tenant_login(tenant_key, username, password)
         else:
-            login = store.verify_tenant_login_auto(username, password)
+            # Prefer default tenant first so the documented default account
+            # remains predictable even when users have similarly named accounts.
+            login = store.verify_tenant_login(Settings.DEFAULT_TENANT_KEY, username, password)
+            if not login:
+                login = store.verify_tenant_login_auto(username, password)
     except ValueError as exc:
         return jsonify({"success": False, "message": str(exc)}), 409
     if not login:
@@ -319,6 +325,39 @@ def api_user_update_config():
     try:
         config = store.update_tenant_config(tenant_key, data, actor=current_actor())
         return jsonify({"success": True, "config": config})
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)})
+
+
+@app.route("/api/user/password", methods=["PUT"])
+def api_user_change_password():
+    err = require_user_json()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    old_password = str(data.get("old_password") or "")
+    new_password = str(data.get("new_password") or "")
+    confirm_password = str(data.get("confirm_password") or "")
+
+    if not old_password:
+        return jsonify({"success": False, "message": "旧密码不能为空"})
+    if len(new_password) < 6:
+        return jsonify({"success": False, "message": "新密码至少 6 位"})
+    if new_password != confirm_password:
+        return jsonify({"success": False, "message": "两次输入的新密码不一致"})
+    if old_password == new_password:
+        return jsonify({"success": False, "message": "新密码不能与旧密码相同"})
+
+    try:
+        store.change_tenant_user_password(
+            tenant_key=current_user_tenant_key(),
+            username=str(session.get("username") or ""),
+            old_password=old_password,
+            new_password=new_password,
+            actor=current_actor(),
+        )
+        return jsonify({"success": True, "message": "密码修改成功"})
     except Exception as exc:
         return jsonify({"success": False, "message": str(exc)})
 

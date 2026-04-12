@@ -24,7 +24,7 @@
 <div id="app" class="wrap">
   <el-card shadow="hover">
     <div class="title">管理员后台登录</div>
-    <div class="sub">默认账号：admin / yangyang83</div>
+    <div class="sub">请输入管理员账号密码登录后台</div>
 
     <el-form label-position="top">
       <el-form-item label="管理员账号">
@@ -47,7 +47,7 @@
 
   createApp({
     setup(){
-      const form = reactive({ username: 'admin', password: 'yangyang83' });
+      const form = reactive({ username: '', password: '' });
       const loading = ref(false);
       const msg = ref('');
 

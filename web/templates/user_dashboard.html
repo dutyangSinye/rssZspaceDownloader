@@ -72,8 +72,7 @@
     .rss-form .el-form-item{margin-bottom:12px}
     .trans-form .el-input,
     .trans-form .el-input-number{width:100%}
-    .rss-add{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px}
-    .rss-add .el-input{width:220px}
+    .rss-toolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
     .block-title{font-size:14px;font-weight:700;color:#374151;margin-bottom:10px}
     .mono{font-family:Consolas,Menlo,monospace}
     @media (max-width:1000px){
@@ -97,6 +96,7 @@
         </div>
       </div>
       <div style="display:flex;gap:8px;">
+        <el-button type="warning" plain @click="openPasswordDialog">账号安全</el-button>
         <el-button @click="refreshAll">刷新</el-button>
         <el-button type="danger" plain @click="logout">退出登录</el-button>
       </div>
@@ -239,20 +239,8 @@
 
             <div class="config-block rss">
               <div class="block-title" style="margin-bottom:8px;">RSS 模式</div>
-              <div class="rss-add">
-                <div>
-                  <div class="head-sub" style="margin-bottom:4px;">类型 Key</div>
-                  <el-input v-model="newMode.mode" placeholder="例如 tv_us" />
-                </div>
-                <div>
-                  <div class="head-sub" style="margin-bottom:4px;">名称</div>
-                  <el-input v-model="newMode.mode_name" placeholder="例如 美剧" />
-                </div>
-                <div>
-                  <div class="head-sub" style="margin-bottom:4px;">默认目录</div>
-                  <el-input v-model="newMode.download_dir" placeholder="/downloads" />
-                </div>
-                <el-button type="primary" plain @click="addMode">新增类型</el-button>
+              <div class="rss-toolbar">
+                <el-button type="primary" plain @click="openAddModeDialog">新增类型</el-button>
               </div>
               <div class="rss-mode-grid">
                 <div class="rss-item" v-for="(m, mode) in config.rss_modes" :key="mode">
@@ -260,7 +248,11 @@
                     <span class="mono">{{ mode }}</span>
                     <div style="display:flex;gap:6px;align-items:center;">
                       <el-switch v-model="m.enabled" :active-value="1" :inactive-value="0" />
-                      <el-button type="danger" link @click="removeMode(mode)">删除</el-button>
+                      <el-popconfirm title="确认删除该 RSS 类型？" confirm-button-text="删除" cancel-button-text="取消" @confirm="removeMode(mode)">
+                        <template #reference>
+                          <el-button type="danger" plain size="small">删除类型</el-button>
+                        </template>
+                      </el-popconfirm>
                     </div>
                   </div>
                   <el-form class="rss-form" label-position="top">
@@ -277,10 +269,58 @@
             <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
             <el-button @click="activeMenu='main'">返回主功能</el-button>
           </div>
+
+          <el-dialog v-model="addModeVisible" title="新增 RSS 类型" width="560px">
+            <el-form label-position="top">
+              <el-form-item label="类型 Key">
+                <el-input v-model="newMode.mode" placeholder="例如 tv_us（字母数字下划线）" />
+              </el-form-item>
+              <el-form-item label="RSS URL">
+                <el-input v-model="newMode.rss_url" placeholder="请输入 RSS 地址" />
+              </el-form-item>
+              <el-form-item label="下载目录">
+                <el-input v-model="newMode.download_dir" placeholder="/downloads" />
+              </el-form-item>
+              <el-form-item label="启用">
+                <el-switch v-model="newMode.enabled" :active-value="1" :inactive-value="0" />
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="addModeVisible=false">取消</el-button>
+              <el-button type="primary" @click="confirmAddMode">确认新增</el-button>
+            </template>
+          </el-dialog>
         </div>
       </el-card>
     </div>
   </div>
+
+  <el-dialog v-model="passwordDialogVisible" title="账号安全" width="560px" @closed="resetPasswordForm">
+    <div class="head-sub" style="margin-bottom:8px;">修改后，下次登录请使用新密码。</div>
+    <el-form label-position="top">
+      <el-row :gutter="10">
+        <el-col :xs="24" :md="8">
+          <el-form-item label="旧密码">
+            <el-input v-model="passwordForm.old_password" type="password" show-password placeholder="请输入当前密码" />
+          </el-form-item>
+        </el-col>
+        <el-col :xs="24" :md="8">
+          <el-form-item label="新密码">
+            <el-input v-model="passwordForm.new_password" type="password" show-password placeholder="至少 6 位" />
+          </el-form-item>
+        </el-col>
+        <el-col :xs="24" :md="8">
+          <el-form-item label="确认新密码">
+            <el-input v-model="passwordForm.confirm_password" type="password" show-password placeholder="再次输入新密码" @keyup.enter="changePassword" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+    </el-form>
+    <template #footer>
+      <el-button @click="passwordDialogVisible=false">取消</el-button>
+      <el-button type="primary" :loading="changingPassword" @click="changePassword">确认修改</el-button>
+    </template>
+  </el-dialog>
 </div>
 
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -302,11 +342,15 @@
       const downloadStarting = ref(false);
       const saving = ref(false);
       const testingTransmission = ref(false);
+      const changingPassword = ref(false);
+      const addModeVisible = ref(false);
+      const passwordDialogVisible = ref(false);
       const transmissionConnected = ref(null);
       const transmissionHost = ref('');
       const transmissionStatusMessage = ref('');
 
       const taskForm = reactive({ mode: '', keywords: '' });
+      const passwordForm = reactive({ old_password: '', new_password: '', confirm_password: '' });
       const config = reactive({
         tenant_name: '',
         transmission: {
@@ -314,7 +358,7 @@
         },
         rss_modes: {}
       });
-      const newMode = reactive({ mode: '', mode_name: '', download_dir: '/downloads' });
+      const newMode = reactive({ mode: '', rss_url: '', download_dir: '/downloads', enabled: 1 });
 
       const enabledModes = computed(()=>{
         return Object.entries(config.rss_modes || {})
@@ -375,7 +419,11 @@
         syncTaskMode();
       }
 
-      function addMode(){
+      function openAddModeDialog(){
+        addModeVisible.value = true;
+      }
+
+      function confirmAddMode(){
         const modeKey = normalizeModeKey(newMode.mode);
         if(!modeKey){
           ElementPlus.ElMessage.warning('类型 Key 不能为空（仅支持字母数字下划线）');
@@ -385,15 +433,22 @@
           ElementPlus.ElMessage.warning(`类型 ${modeKey} 已存在`);
           return;
         }
+        const rssUrl = String(newMode.rss_url || '').trim();
+        if(!rssUrl){
+          ElementPlus.ElMessage.warning('RSS URL 不能为空');
+          return;
+        }
         config.rss_modes[modeKey] = {
-          mode_name: newMode.mode_name.trim() || modeKey,
-          rss_url: '',
+          mode_name: modeKey,
+          rss_url: rssUrl,
           download_dir: newMode.download_dir.trim() || '/downloads',
-          enabled: 1,
+          enabled: Number(newMode.enabled) === 1 ? 1 : 0,
         };
         newMode.mode = '';
-        newMode.mode_name = '';
+        newMode.rss_url = '';
         newMode.download_dir = '/downloads';
+        newMode.enabled = 1;
+        addModeVisible.value = false;
         syncTaskMode();
       }
 
@@ -444,6 +499,51 @@
         ElementPlus.ElMessage.success('配置保存成功');
         await refreshAll();
         activeMenu.value = 'main';
+      }
+
+      function resetPasswordForm(){
+        passwordForm.old_password = '';
+        passwordForm.new_password = '';
+        passwordForm.confirm_password = '';
+      }
+
+      function openPasswordDialog(){
+        resetPasswordForm();
+        passwordDialogVisible.value = true;
+      }
+
+      async function changePassword(){
+        if(!passwordForm.old_password){
+          ElementPlus.ElMessage.warning('请输入旧密码');
+          return;
+        }
+        if((passwordForm.new_password || '').length < 6){
+          ElementPlus.ElMessage.warning('新密码至少 6 位');
+          return;
+        }
+        if(passwordForm.new_password !== passwordForm.confirm_password){
+          ElementPlus.ElMessage.warning('两次输入的新密码不一致');
+          return;
+        }
+        if(passwordForm.old_password === passwordForm.new_password){
+          ElementPlus.ElMessage.warning('新密码不能与旧密码相同');
+          return;
+        }
+
+        changingPassword.value = true;
+        const d = await api('/api/user/password', {
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ ...passwordForm })
+        });
+        changingPassword.value = false;
+        if(!d.success){
+          ElementPlus.ElMessage.error(d.message || '修改密码失败');
+          return;
+        }
+        resetPasswordForm();
+        passwordDialogVisible.value = false;
+        ElementPlus.ElMessage.success(d.message || '密码修改成功');
       }
 
       async function testTransmission(){
@@ -571,6 +671,7 @@
         previewItems,
         history,
         taskForm,
+        passwordForm,
         config,
         newMode,
         enabledModes,
@@ -582,12 +683,19 @@
         downloadStarting,
         saving,
         testingTransmission,
+        changingPassword,
+        addModeVisible,
+        passwordDialogVisible,
         refreshAll,
         logout,
         preview,
         startDownload,
         saveConfig,
-        addMode,
+        resetPasswordForm,
+        openPasswordDialog,
+        changePassword,
+        openAddModeDialog,
+        confirmAddMode,
         removeMode,
         testTransmission,
         downloadOne,

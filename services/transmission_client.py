@@ -1,6 +1,8 @@
-﻿import logging
+import logging
+import re
 import time
 from typing import Dict, List, Optional, Set
+from urllib.parse import urlsplit
 
 import requests
 
@@ -12,6 +14,9 @@ logger = logging.getLogger(__name__)
 class TransmissionClient:
     """Simple Transmission RPC client."""
 
+    _SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+    _DUP_SCHEME_RE = re.compile(r"^(https?://)+", re.IGNORECASE)
+
     def __init__(
         self,
         host: Optional[str] = None,
@@ -21,7 +26,8 @@ class TransmissionClient:
         max_retries: Optional[int] = None,
         retry_delay: Optional[int] = None,
     ):
-        self.host = (host or Settings.TRANSMISSION_HOST).rstrip("/")
+        raw_host = Settings.TRANSMISSION_HOST if host is None else host
+        self.host = self._normalize_host(str(raw_host or ""))
         self.username = Settings.TRANSMISSION_USERNAME if username is None else username
         self.password = Settings.TRANSMISSION_PASSWORD if password is None else password
         self.request_timeout = int(Settings.REQUEST_TIMEOUT if request_timeout is None else request_timeout)
@@ -30,6 +36,38 @@ class TransmissionClient:
 
         self.session_id: Optional[str] = None
         self._auth = (self.username, self.password) if self.username and self.password else None
+
+    @classmethod
+    def _normalize_host(cls, host: str) -> str:
+        value = (host or "").strip()
+        if not value:
+            return ""
+
+        # Collapse accidental duplicated scheme, e.g. http://http://host:9091
+        if cls._DUP_SCHEME_RE.match(value):
+            scheme = "https" if value.lower().startswith("https://") else "http"
+            value = f"{scheme}://{cls._DUP_SCHEME_RE.sub('', value)}"
+
+        if not cls._SCHEME_RE.match(value):
+            value = f"http://{value}"
+
+        parts = urlsplit(value)
+        scheme = parts.scheme.lower() if parts.scheme in {"http", "https"} else "http"
+        netloc = parts.netloc
+        path = parts.path or ""
+
+        # Handle malformed input like http://host/:9091
+        if path.startswith("/:") and path[2:].isdigit() and ":" not in netloc:
+            netloc = f"{netloc}:{path[2:]}"
+            path = ""
+
+        lower_path = path.lower()
+        if lower_path == "/transmission/rpc":
+            path = ""
+        elif lower_path.endswith("/transmission/rpc"):
+            path = path[: -len("/transmission/rpc")]
+
+        return f"{scheme}://{netloc}{path.rstrip('/')}"
 
     def _refresh_session(self) -> bool:
         try:

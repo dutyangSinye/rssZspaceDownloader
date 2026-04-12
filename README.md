@@ -52,13 +52,50 @@ python main.py
 - 用户前台：`http://localhost:5000/user/login`
 - 管理后台：`http://localhost:5000/admin/login`
 
+## Docker 启动
+
+1. 准备环境文件（首次）
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+2. 启动
+
+```bash
+docker compose up -d --build
+```
+
+3. 查看日志
+
+```bash
+docker compose logs -f
+```
+
+4. 停止
+
+```bash
+docker compose down
+```
+
+说明：
+- `docker-compose.yml` 已把 `./data` 和 `./logs` 挂载到容器，数据与日志会持久化。
+- 容器内访问宿主机 Transmission 时，建议把 `TRANSMISSION_HOST` 配成 `http://host.docker.internal:9091`（Linux 环境可用宿主机实际 IP）。
+- Docker 镜像默认使用 `requirements-docker.txt`（轻量依赖，不包含 Playwright），更适合 NAS 场景快速部署。
+
 ## 默认账号
 
 - 首次启动会自动初始化数据库并创建 `default` 租户。
 - 默认管理员账号：`admin`
-- 默认管理员密码：`yangyang83`
+- 默认管理员密码：`admin`
 - 默认租户登录账号：`admin`
-- 默认租户登录密码：`yangyang83`
+- 默认租户登录密码：`admin`
 
 ## 配置说明
 

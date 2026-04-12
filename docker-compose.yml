@@ -1,0 +1,17 @@
+﻿services:
+  rss-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rss-zspace-downloader
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
