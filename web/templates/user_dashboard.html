@@ -240,26 +240,31 @@
             <div class="config-block rss">
               <div class="block-title" style="margin-bottom:8px;">RSS 模式</div>
               <div class="rss-toolbar">
+                <el-tag type="info" effect="plain">当前类型数：{{ rssModeCards.length }}</el-tag>
                 <el-button type="primary" plain @click="openAddModeDialog">新增类型</el-button>
               </div>
-              <div class="rss-mode-grid">
-                <div class="rss-item" v-for="(m, mode) in config.rss_modes" :key="mode">
+              <el-empty
+                v-if="!rssModeCards.length"
+                description="当前没有 RSS 类型，请先新增。"
+                :image-size="72"
+              ></el-empty>
+              <div class="rss-mode-grid" v-if="rssModeCards.length">
+                <div class="rss-item" v-for="item in rssModeCards" :key="item.mode">
                   <div class="block-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                    <span class="mono">{{ mode }}</span>
+                    <span class="mono">{{ item.mode }}</span>
                     <div style="display:flex;gap:6px;align-items:center;">
-                      <el-switch v-model="m.enabled" :active-value="1" :inactive-value="0" />
-                      <el-popconfirm title="确认删除该 RSS 类型？" confirm-button-text="删除" cancel-button-text="取消" @confirm="removeMode(mode)">
-                        <template #reference>
-                          <el-button type="danger" plain size="small">删除类型</el-button>
-                        </template>
-                      </el-popconfirm>
+                      <el-switch v-model="item.data.enabled" :active-value="1" :inactive-value="0" />
+                      <el-button type="danger" size="small" @click="removeModeConfirm(item.mode)">删除类型</el-button>
                     </div>
                   </div>
                   <el-form class="rss-form" label-position="top">
-                    <el-form-item label="名称"><el-input v-model="m.mode_name" /></el-form-item>
-                    <el-form-item label="RSS URL"><el-input v-model="m.rss_url" /></el-form-item>
-                    <el-form-item label="目录"><el-input v-model="m.download_dir" /></el-form-item>
+                    <el-form-item label="名称"><el-input v-model="item.data.mode_name" /></el-form-item>
+                    <el-form-item label="RSS URL"><el-input v-model="item.data.rss_url" /></el-form-item>
+                    <el-form-item label="目录"><el-input v-model="item.data.download_dir" /></el-form-item>
                   </el-form>
+                  <div style="display:flex;justify-content:flex-end;">
+                    <el-button type="danger" plain @click="removeModeConfirm(item.mode)">删除此类型</el-button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -272,8 +277,8 @@
 
           <el-dialog v-model="addModeVisible" title="新增 RSS 类型" width="560px">
             <el-form label-position="top">
-              <el-form-item label="类型 Key">
-                <el-input v-model="newMode.mode" placeholder="例如 tv_us（字母数字下划线）" />
+              <el-form-item label="类型名称">
+                <el-input v-model="newMode.mode" placeholder="例如：日剧 / 纪录片（支持中文）" />
               </el-form-item>
               <el-form-item label="RSS URL">
                 <el-input v-model="newMode.rss_url" placeholder="请输入 RSS 地址" />
@@ -365,6 +370,9 @@
           .filter(([, m]) => Number(m.enabled) === 1)
           .map(([mode, m]) => ({ mode, mode_name: m.mode_name || mode }));
       });
+      const rssModeCards = computed(()=>{
+        return Object.entries(config.rss_modes || {}).map(([mode, data]) => ({ mode, data }));
+      });
       const transmissionStatusLabel = computed(()=>{
         if(transmissionConnected.value === true) return '在线';
         if(transmissionConnected.value === false) return '离线';
@@ -424,22 +432,24 @@
       }
 
       function confirmAddMode(){
-        const modeKey = normalizeModeKey(newMode.mode);
+        const rawModeName = String(newMode.mode || '').trim();
+        let modeKey = normalizeModeKey(rawModeName);
         if(!modeKey){
-          ElementPlus.ElMessage.warning('类型 Key 不能为空（仅支持字母数字下划线）');
-          return;
+          modeKey = `mode_${Date.now().toString().slice(-6)}`;
         }
-        if(config.rss_modes[modeKey]){
-          ElementPlus.ElMessage.warning(`类型 ${modeKey} 已存在`);
-          return;
+        let finalKey = modeKey;
+        let idx = 2;
+        while(config.rss_modes[finalKey]){
+          finalKey = `${modeKey}_${idx}`;
+          idx += 1;
         }
         const rssUrl = String(newMode.rss_url || '').trim();
         if(!rssUrl){
           ElementPlus.ElMessage.warning('RSS URL 不能为空');
           return;
         }
-        config.rss_modes[modeKey] = {
-          mode_name: modeKey,
+        config.rss_modes[finalKey] = {
+          mode_name: rawModeName || finalKey,
           rss_url: rssUrl,
           download_dir: newMode.download_dir.trim() || '/downloads',
           enabled: Number(newMode.enabled) === 1 ? 1 : 0,
@@ -450,11 +460,25 @@
         newMode.enabled = 1;
         addModeVisible.value = false;
         syncTaskMode();
+        ElementPlus.ElMessage.success(`已新增类型：${finalKey}`);
       }
 
       function removeMode(mode){
         delete config.rss_modes[mode];
         syncTaskMode();
+      }
+
+      async function removeModeConfirm(mode){
+        try{
+          await ElementPlus.ElMessageBox.confirm(
+            `确认删除 RSS 类型「${mode}」吗？`,
+            '删除确认',
+            { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+          );
+        }catch(_e){
+          return;
+        }
+        removeMode(mode);
       }
 
       async function ensureLogin(){
@@ -675,6 +699,7 @@
         config,
         newMode,
         enabledModes,
+        rssModeCards,
         transmissionStatusLabel,
         transmissionConnected,
         transmissionHost,
@@ -696,6 +721,7 @@
         changePassword,
         openAddModeDialog,
         confirmAddMode,
+        removeModeConfirm,
         removeMode,
         testTransmission,
         downloadOne,
