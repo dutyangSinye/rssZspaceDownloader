@@ -38,6 +38,12 @@
       <div>
         <div class="head-title">租户用户控制台</div>
         <div class="head-sub">{{ who }}</div>
+        <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')">
+            Transmission：{{ transmissionStatusLabel }}
+          </el-tag>
+          <span class="head-sub" v-if="transmissionHost">Host: {{ transmissionHost }}</span>
+        </div>
       </div>
       <div style="display:flex;gap:8px;">
         <el-button @click="refreshAll">刷新</el-button>
@@ -157,6 +163,13 @@
             <el-col :xs="24" :md="8"><el-form-item label="重试次数"><el-input-number v-model="config.transmission.max_retries" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
             <el-col :xs="24" :md="8"><el-form-item label="重试间隔"><el-input-number v-model="config.transmission.retry_delay" :min="0" :step="1" style="width:100%" /></el-form-item></el-col>
           </el-row>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <el-button @click="testTransmission" :loading="testingTransmission">测试 Transmission 连接</el-button>
+            <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')">
+              当前状态：{{ transmissionStatusLabel }}
+            </el-tag>
+            <span class="head-sub">{{ transmissionStatusMessage }}</span>
+          </div>
         </el-form>
 
         <el-divider content-position="left">RSS 模式</el-divider>
@@ -201,6 +214,10 @@
       const previewLoading = ref(false);
       const downloadStarting = ref(false);
       const saving = ref(false);
+      const testingTransmission = ref(false);
+      const transmissionConnected = ref(null);
+      const transmissionHost = ref('');
+      const transmissionStatusMessage = ref('');
 
       const taskForm = reactive({ mode: '', keywords: '' });
       const config = reactive({
@@ -215,6 +232,11 @@
         return Object.entries(config.rss_modes || {})
           .filter(([, m]) => Number(m.enabled) === 1)
           .map(([mode, m]) => ({ mode, mode_name: m.mode_name || mode }));
+      });
+      const transmissionStatusLabel = computed(()=>{
+        if(transmissionConnected.value === true) return '在线';
+        if(transmissionConnected.value === false) return '离线';
+        return '未知';
       });
 
       async function api(url, options={}){
@@ -254,6 +276,19 @@
         normalizeConfig(d.config || {});
       }
 
+      async function loadStatus(){
+        const d = await api('/api/user/status');
+        if(!d.success){
+          transmissionConnected.value = null;
+          transmissionHost.value = config.transmission.host || '';
+          transmissionStatusMessage.value = d.message || '状态获取失败';
+          return;
+        }
+        transmissionConnected.value = typeof d.transmission_connected === 'boolean' ? d.transmission_connected : null;
+        transmissionHost.value = d.transmission_host || config.transmission.host || '';
+        transmissionStatusMessage.value = transmissionConnected.value === true ? '连接正常' : '连接异常';
+      }
+
       async function saveConfig(){
         saving.value = true;
         const payload = {
@@ -269,6 +304,31 @@
         ElementPlus.ElMessage.success('配置保存成功');
         await refreshAll();
         activeMenu.value = 'main';
+      }
+
+      async function testTransmission(){
+        testingTransmission.value = true;
+        const d = await api('/api/user/transmission/test', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ transmission: { ...config.transmission } })
+        });
+        testingTransmission.value = false;
+        transmissionHost.value = config.transmission.host || transmissionHost.value;
+        if(!d.success){
+          transmissionConnected.value = false;
+          transmissionStatusMessage.value = d.message || '测试失败';
+          ElementPlus.ElMessage.error(d.message || 'Transmission 测试失败');
+          return;
+        }
+        transmissionConnected.value = typeof d.transmission_connected === 'boolean' ? d.transmission_connected : null;
+        transmissionHost.value = d.transmission_host || transmissionHost.value;
+        transmissionStatusMessage.value = d.message || (transmissionConnected.value ? '连接成功' : '连接失败');
+        if(transmissionConnected.value){
+          ElementPlus.ElMessage.success(transmissionStatusMessage.value);
+        }else{
+          ElementPlus.ElMessage.warning(transmissionStatusMessage.value);
+        }
       }
 
       async function preview(){
@@ -345,6 +405,7 @@
 
       async function refreshAll(){
         await loadConfig();
+        await loadStatus();
         await loadHistory();
       }
 
@@ -372,14 +433,20 @@
         taskForm,
         config,
         enabledModes,
+        transmissionStatusLabel,
+        transmissionConnected,
+        transmissionHost,
+        transmissionStatusMessage,
         previewLoading,
         downloadStarting,
         saving,
+        testingTransmission,
         refreshAll,
         logout,
         preview,
         startDownload,
         saveConfig,
+        testTransmission,
         downloadOne,
       };
     }

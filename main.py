@@ -358,6 +358,60 @@ def api_user_status():
         return jsonify({"success": False, "message": str(exc)})
 
 
+@app.route("/api/user/transmission/test", methods=["POST"])
+def api_user_test_transmission():
+    err = require_user_json()
+    if err:
+        return err
+
+    tenant_key = current_user_tenant_key()
+    data = request.get_json(silent=True) or {}
+    incoming = data.get("transmission") or {}
+
+    try:
+        config = store.get_tenant_config(tenant_key)
+        base = config.get("transmission") or {}
+
+        def to_int(value, default_value: int, min_value: int) -> int:
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                parsed = int(default_value)
+            return parsed if parsed >= min_value else min_value
+
+        tr = {
+            "host": str(incoming.get("host", base.get("host", ""))).strip(),
+            "username": str(incoming.get("username", base.get("username", ""))).strip(),
+            "password": str(incoming.get("password", base.get("password", ""))),
+            "request_timeout": to_int(incoming.get("request_timeout", base.get("request_timeout", 30)), 30, 1),
+            "max_retries": to_int(incoming.get("max_retries", base.get("max_retries", 3)), 3, 1),
+            "retry_delay": to_int(incoming.get("retry_delay", base.get("retry_delay", 2)), 2, 0),
+        }
+        if not tr["host"]:
+            return jsonify({"success": False, "message": "Transmission Host 不能为空", "transmission_connected": False})
+
+        transmission_client = TransmissionClient(
+            host=tr["host"],
+            username=tr["username"],
+            password=tr["password"],
+            request_timeout=tr["request_timeout"],
+            max_retries=tr["max_retries"],
+            retry_delay=tr["retry_delay"],
+        )
+        connected = transmission_client.test_connection()
+        return jsonify(
+            {
+                "success": True,
+                "tenant_key": tenant_key,
+                "transmission_host": tr["host"],
+                "transmission_connected": connected,
+                "message": "连接成功" if connected else "连接失败，请检查 Host/账号/密码",
+            }
+        )
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc), "transmission_connected": False})
+
+
 @app.route("/api/user/history", methods=["GET"])
 def api_user_history():
     err = require_user_json()
