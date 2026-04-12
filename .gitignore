@@ -7,7 +7,7 @@ __pycache__/
 dist/
 build/
 
-# 铏氭嫙鐜
+# Virtual env
 venv/
 env/
 ENV/
@@ -18,32 +18,12 @@ ENV/
 *.swp
 *.swo
 
-# 鏁版嵁鏂囦欢锛堜繚鐣欑洰褰曠粨鏋勶級
-data/article_history/*.json
-data/previews/*.html
-data/images/*
-data/screenshots/*
-data/browser_data/
-data/toutiao_cookie.txt
+# Runtime data
+.env
+data/app.db
 data/history.json
-
-# 鏃ュ織
 logs/*.log
 
-# 鐜閰嶇疆
-.env
-
-# 璋冭瘯鏂囦欢
+# Debug artifacts
 *.png
 debug_*.png
-toutiao_debug.png
-
-# 根目录运行产物
-article_history/
-previews/
-browser_data/
-history.json
-toutiao_cookie.txt
-
-
-data/app.db

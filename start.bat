@@ -2,7 +2,7 @@
 chcp 65001 >nul
 
 echo ========================================
-echo   mteam-downloader 多租户版
+echo   rss-downloader 多租户版
 echo ========================================
 
 :: Check Python

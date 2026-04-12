@@ -1,5 +1,5 @@
 ﻿# -*- coding: utf-8 -*-
-"""M-TEAM Downloader with separated user/admin consoles."""
+"""Multi-tenant RSS Downloader with separated user/admin consoles."""
 
 import re
 import time
@@ -687,7 +687,7 @@ def api_admin_migrate_legacy_history():
 
 if __name__ == "__main__":
     logger.info("=" * 50)
-    logger.info("M-TEAM Downloader - User/Admin Separated")
+    logger.info("RSS Downloader - User/Admin Separated")
     logger.info("用户端: http://localhost:%s/user/login", Settings.PORT)
     logger.info("管理端: http://localhost:%s/admin/login", Settings.PORT)
     logger.info("数据库文件: %s", Settings.DB_PATH)

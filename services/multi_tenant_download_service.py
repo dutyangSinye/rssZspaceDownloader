@@ -1,4 +1,4 @@
-import time
+﻿import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
@@ -65,7 +65,8 @@ class MultiTenantDownloadService:
         mode_cfg = self._mode_config(tenant_key, mode)
         client = self._tenant_client(tenant_key)
         rss_url = str(mode_cfg["rss_url"]).strip()
-        parsed = self.rss_parser.parse(self._fetch_rss_text(rss_url, client.request_timeout, client.max_retries, client.retry_delay))
+        rss_text = self._fetch_rss_text(rss_url, client.request_timeout, client.max_retries, client.retry_delay)
+        parsed = self.rss_parser.parse(rss_text)
         return [RSSItem(**item) for item in parsed]
 
     @staticmethod
@@ -75,10 +76,10 @@ class MultiTenantDownloadService:
             return []
 
         urls: List[str] = [raw]
-        # M-Team RSS occasionally resets plain HTTP connections; prefer HTTPS.
-        if raw.startswith("http://rss.m-team.cc/"):
+        # Some RSS servers may reset plain HTTP connections; prefer HTTPS when possible.
+        if raw.startswith("http://"):
             https_url = "https://" + raw[len("http://") :]
-            urls = [https_url, raw]
+            urls = [https_url, raw] if https_url != raw else [raw]
         return urls
 
     @staticmethod
@@ -105,7 +106,6 @@ class MultiTenantDownloadService:
                 try:
                     resp = session.get(url, timeout=max(3, int(timeout)), headers=self._rss_headers())
                     resp.raise_for_status()
-                    # Respect server-provided encoding first.
                     if not resp.encoding:
                         resp.encoding = resp.apparent_encoding or "utf-8"
                     return resp.text
@@ -113,7 +113,6 @@ class MultiTenantDownloadService:
                     status = getattr(exc.response, "status_code", "unknown")
                     last_status_error = f"RSS HTTP 状态异常: {status}"
                     last_exc = exc
-                    # 4xx normally won't recover by retrying same URL.
                     if isinstance(status, int) and 400 <= status < 500:
                         break
                 except requests.RequestException as exc:
@@ -175,7 +174,7 @@ class MultiTenantDownloadService:
             url = item.enclosure_url
 
             if not url or url in in_batch_urls:
-                skipped.append(title or "未知标题")
+                skipped.append(title or "未命名种子")
                 continue
             in_batch_urls.add(url)
 
@@ -204,7 +203,7 @@ class MultiTenantDownloadService:
                 else:
                     failed.append({"title": title, "error": rpc_result or "未知错误"})
             except Exception as exc:
-                logger.exception("下载项处理失败")
+                logger.exception("下载条目处理失败")
                 failed.append({"title": title, "error": str(exc)})
 
             if progress_callback:
