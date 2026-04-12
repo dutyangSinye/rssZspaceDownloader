@@ -24,6 +24,7 @@ _FULL_COLON = "\uff1a"
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPACE_RE = re.compile(r"\s+")
+_CJK_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]")
 
 
 class RSSParser:
@@ -57,6 +58,10 @@ class RSSParser:
             chinese_name = RSSParser.extract_chinese_name(summary)
             if not chinese_name:
                 chinese_name = RSSParser.extract_chinese_name(title)
+            if not chinese_name:
+                chinese_name = RSSParser.extract_chinese_fragment(title)
+            if not chinese_name:
+                chinese_name = RSSParser.extract_chinese_fragment(summary)
 
             items.append(
                 {
@@ -128,10 +133,38 @@ class RSSParser:
         val = (value or "").strip()
         if not val:
             return ""
-        val = re.split(rf"[|/{_BULLET}]", val)[0].strip()
-        val = val.strip("-：:[]()（） ")
-        val = _SPACE_RE.sub(" ", val)
-        return val
+        # Prefer Chinese-like segment when value contains multiple aliases.
+        parts = [p.strip() for p in re.split(rf"[|/{_BULLET}]", val) if p.strip()]
+        if not parts:
+            return ""
+        chosen = next((p for p in parts if _CJK_RE.search(p)), parts[0])
+        chosen = chosen.strip("-：:[]()（） ")
+        chosen = _SPACE_RE.sub(" ", chosen)
+        return chosen
+
+    @staticmethod
+    def extract_chinese_fragment(value: str) -> str:
+        if not value:
+            return ""
+        text = html.unescape(value)
+        text = _TAG_RE.sub(" ", text)
+        text = text.replace("\u3000", " ").replace("\xa0", " ")
+        text = _SPACE_RE.sub(" ", text).strip()
+        if not text:
+            return ""
+
+        # Split by common separators and pick the segment with most CJK chars.
+        segments = [s.strip() for s in re.split(r"[|/\\]+", text) if s.strip()]
+        if not segments:
+            return ""
+        scored = sorted(
+            ((sum(1 for ch in seg if _CJK_RE.search(ch)), seg) for seg in segments),
+            key=lambda x: x[0],
+            reverse=True,
+        )
+        if scored and scored[0][0] > 0:
+            return RSSParser._clean_name(scored[0][1])
+        return ""
 
     @staticmethod
     def filter_by_keywords(items: List[Dict], keywords: List[str]) -> List[Dict]:
