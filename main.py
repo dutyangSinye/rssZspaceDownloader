@@ -584,24 +584,12 @@ def api_admin_create_tenant():
     tenant_key = (data.get("tenant_key") or "").strip().lower()
     tenant_name = (data.get("tenant_name") or "").strip()
     copy_from = (data.get("copy_from") or "default").strip().lower() or "default"
-    user_username = (data.get("user_username") or data.get("owner_username") or "").strip()
-    user_password = str(data.get("user_password") or data.get("owner_password") or "")
 
     if not validate_tenant_key(tenant_key):
         return jsonify({"success": False, "message": "tenant_key 格式无效，仅支持小写字母/数字/_/-，长度2-64"})
 
     try:
-        if user_username and user_password:
-            tenant = store.register_tenant_with_user(
-                tenant_key=tenant_key,
-                tenant_name=tenant_name or tenant_key,
-                username=user_username,
-                password=user_password,
-                copy_from=copy_from,
-                actor=current_actor(),
-            )
-        else:
-            tenant = store.create_tenant(tenant_key, tenant_name or tenant_key, copy_from=copy_from, actor=current_actor())
+        tenant = store.create_tenant(tenant_key, tenant_name or tenant_key, copy_from=copy_from, actor=current_actor())
         return jsonify({"success": True, "tenant": tenant})
     except Exception as exc:
         return jsonify({"success": False, "message": str(exc)})

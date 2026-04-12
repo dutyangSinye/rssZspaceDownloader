@@ -59,20 +59,6 @@
             <el-input v-model="createForm.copy_from" placeholder="default" />
           </el-form-item>
 
-          <el-divider content-position="left">可选：初始用户</el-divider>
-          <el-row :gutter="10">
-            <el-col :xs="24" :md="12">
-              <el-form-item label="租户用户名">
-                <el-input v-model="createForm.user_username" />
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :md="12">
-              <el-form-item label="租户密码">
-                <el-input v-model="createForm.user_password" type="password" show-password />
-              </el-form-item>
-            </el-col>
-          </el-row>
-
           <el-button type="primary" :loading="createLoading" @click="createTenant">创建租户</el-button>
         </el-form>
       </el-card>
@@ -155,9 +141,7 @@
       const createForm = reactive({
         tenant_key: '',
         tenant_name: '',
-        copy_from: 'default',
-        user_username: '',
-        user_password: ''
+        copy_from: 'default'
       });
       const migrateTenant = ref('default');
 
@@ -182,9 +166,7 @@
         const payload = {
           tenant_key: createForm.tenant_key.trim().toLowerCase(),
           tenant_name: createForm.tenant_name.trim(),
-          copy_from: (createForm.copy_from || 'default').trim().toLowerCase() || 'default',
-          user_username: createForm.user_username.trim(),
-          user_password: createForm.user_password || ''
+          copy_from: (createForm.copy_from || 'default').trim().toLowerCase() || 'default'
         };
         const d = await api('/api/admin/tenants', {
           method:'POST',
@@ -196,8 +178,6 @@
         ElementPlus.ElMessage.success('创建成功');
         createForm.tenant_key = '';
         createForm.tenant_name = '';
-        createForm.user_username = '';
-        createForm.user_password = '';
         await refreshAll();
       }
 
