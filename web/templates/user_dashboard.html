@@ -22,7 +22,58 @@
     .menu-card .el-menu{border-right:none}
     .panel{display:grid;gap:12px}
     .rss-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .rss-item{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fafafa}
+    .rss-item{
+      border:1px solid #dbe4f0;
+      border-radius:14px;
+      padding:12px;
+      background:linear-gradient(180deg,#fbfcff 0%,#f7fbff 100%);
+      box-shadow:0 4px 12px rgba(15,23,42,.04);
+      transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    .rss-item:hover{
+      transform:translateY(-2px);
+      border-color:#c6d4ea;
+      box-shadow:0 10px 18px rgba(15,23,42,.08);
+    }
+    .config-shell{display:grid;gap:12px}
+    .config-head{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:flex-start;
+      flex-wrap:wrap;
+    }
+    .config-title{font-size:18px;font-weight:700;color:#1f2937}
+    .config-desc{font-size:13px;color:#64748b;margin-top:4px}
+    .config-grid{display:grid;gap:12px}
+    .config-block{
+      border:1px solid #dce6f2;
+      border-radius:14px;
+      padding:14px;
+      background:#fcfdff;
+    }
+    .config-block.trans{
+      background:linear-gradient(135deg,#f4fbff 0%,#f8fff9 100%);
+    }
+    .config-block.rss{
+      background:linear-gradient(135deg,#f9fbff 0%,#fefeff 100%);
+    }
+    .action-bar{
+      margin-top:12px;
+      border-top:1px dashed #cfd8e3;
+      padding-top:12px;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .tenant-form-compact .el-form-item{max-width:420px;margin-bottom:0}
+    .trans-form .el-form-item,
+    .rss-form .el-form-item{margin-bottom:12px}
+    .trans-form .el-input,
+    .trans-form .el-input-number{width:100%}
+    .rss-add{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px}
+    .rss-add .el-input{width:220px}
     .block-title{font-size:14px;font-weight:700;color:#374151;margin-bottom:10px}
     .mono{font-family:Consolas,Menlo,monospace}
     @media (max-width:1000px){
@@ -78,7 +129,6 @@
           <el-form-item>
             <el-button @click="preview" :loading="previewLoading">预览 RSS</el-button>
             <el-button type="primary" @click="startDownload" :loading="downloadStarting">开始下载</el-button>
-            <el-button text @click="activeMenu='config'">去配置中心</el-button>
           </el-form-item>
         </el-form>
         <el-alert :title="progressText" type="info" :closable="false" style="margin-top:8px" />
@@ -105,12 +155,6 @@
             </template>
           </el-table-column>
           <el-table-column prop="title" label="原标题" min-width="320" show-overflow-tooltip />
-          <el-table-column label="种子链接" min-width="120">
-            <template #default="scope">
-              <el-link v-if="scope.row.enclosure_url" :href="scope.row.enclosure_url" target="_blank" type="primary">打开</el-link>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
           <el-table-column label="操作" width="100">
             <template #default="scope">
               <el-button type="primary" link @click="downloadOne(scope.row)">下载</el-button>
@@ -141,55 +185,98 @@
 
     <div class="panel" v-else>
       <el-card shadow="never">
-        <template #header>
-          <div class="block-title" style="margin:0;">租户配置</div>
-        </template>
-
-        <el-form label-width="110px">
-          <el-form-item label="租户名称">
-            <el-input v-model="config.tenant_name" />
-          </el-form-item>
-        </el-form>
-
-        <el-divider content-position="left">Transmission</el-divider>
-        <el-form label-width="90px">
-          <el-row :gutter="10">
-            <el-col :xs="24" :md="12"><el-form-item label="Host"><el-input v-model="config.transmission.host" /></el-form-item></el-col>
-            <el-col :xs="24" :md="6"><el-form-item label="用户名"><el-input v-model="config.transmission.username" /></el-form-item></el-col>
-            <el-col :xs="24" :md="6"><el-form-item label="密码"><el-input v-model="config.transmission.password" type="password" show-password /></el-form-item></el-col>
-          </el-row>
-          <el-row :gutter="10">
-            <el-col :xs="24" :md="8"><el-form-item label="超时"><el-input-number v-model="config.transmission.request_timeout" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
-            <el-col :xs="24" :md="8"><el-form-item label="重试次数"><el-input-number v-model="config.transmission.max_retries" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
-            <el-col :xs="24" :md="8"><el-form-item label="重试间隔"><el-input-number v-model="config.transmission.retry_delay" :min="0" :step="1" style="width:100%" /></el-form-item></el-col>
-          </el-row>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <el-button @click="testTransmission" :loading="testingTransmission">测试 Transmission 连接</el-button>
-            <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')">
-              当前状态：{{ transmissionStatusLabel }}
-            </el-tag>
-            <span class="head-sub">{{ transmissionStatusMessage }}</span>
-          </div>
-        </el-form>
-
-        <el-divider content-position="left">RSS 模式</el-divider>
-        <div class="rss-mode-grid">
-          <div class="rss-item" v-for="(m, mode) in config.rss_modes" :key="mode">
-            <div class="block-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-              <span class="mono">{{ mode }}</span>
-              <el-switch v-model="m.enabled" :active-value="1" :inactive-value="0" />
+        <div class="config-shell">
+          <div class="config-head">
+            <div>
+              <div class="config-title">配置中心</div>
+              <div class="config-desc">建议先测试 Transmission 连通性，再保存配置。</div>
             </div>
-            <el-form label-width="80px">
-              <el-form-item label="名称"><el-input v-model="m.mode_name" /></el-form-item>
-              <el-form-item label="RSS URL"><el-input v-model="m.rss_url" /></el-form-item>
-              <el-form-item label="目录"><el-input v-model="m.download_dir" /></el-form-item>
-            </el-form>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')" effect="light">
+                连接状态：{{ transmissionStatusLabel }}
+              </el-tag>
+              <el-tag type="info" effect="plain" v-if="transmissionHost">Host: {{ transmissionHost }}</el-tag>
+            </div>
           </div>
-        </div>
 
-        <div style="margin-top:12px;display:flex;gap:8px;">
-          <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
-          <el-button @click="activeMenu='main'">返回主功能</el-button>
+          <div class="config-grid">
+            <div class="config-block">
+              <div class="block-title" style="margin-bottom:8px;">租户信息</div>
+              <el-form class="tenant-form-compact" label-position="top">
+                <el-form-item label="租户名称">
+                  <el-input
+                    v-model="config.tenant_name"
+                    placeholder="请输入租户展示名称"
+                    maxlength="24"
+                    show-word-limit
+                  />
+                </el-form-item>
+              </el-form>
+            </div>
+
+            <div class="config-block trans">
+              <div class="block-title" style="margin-bottom:8px;">Transmission</div>
+              <el-form class="trans-form" label-position="top">
+                <el-row :gutter="10">
+                  <el-col :xs="24" :md="12"><el-form-item label="Host"><el-input v-model="config.transmission.host" placeholder="http://127.0.0.1:9091" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="6"><el-form-item label="用户名"><el-input v-model="config.transmission.username" placeholder="可选" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="6"><el-form-item label="密码"><el-input v-model="config.transmission.password" type="password" show-password placeholder="可选" /></el-form-item></el-col>
+                </el-row>
+                <el-row :gutter="10">
+                  <el-col :xs="24" :md="8"><el-form-item label="超时"><el-input-number v-model="config.transmission.request_timeout" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="8"><el-form-item label="重试次数"><el-input-number v-model="config.transmission.max_retries" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="8"><el-form-item label="重试间隔"><el-input-number v-model="config.transmission.retry_delay" :min="0" :step="1" style="width:100%" /></el-form-item></el-col>
+                </el-row>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <el-button @click="testTransmission" :loading="testingTransmission">测试 Transmission 连接</el-button>
+                  <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')">
+                    当前状态：{{ transmissionStatusLabel }}
+                  </el-tag>
+                  <span class="head-sub">{{ transmissionStatusMessage }}</span>
+                </div>
+              </el-form>
+            </div>
+
+            <div class="config-block rss">
+              <div class="block-title" style="margin-bottom:8px;">RSS 模式</div>
+              <div class="rss-add">
+                <div>
+                  <div class="head-sub" style="margin-bottom:4px;">类型 Key</div>
+                  <el-input v-model="newMode.mode" placeholder="例如 tv_us" />
+                </div>
+                <div>
+                  <div class="head-sub" style="margin-bottom:4px;">名称</div>
+                  <el-input v-model="newMode.mode_name" placeholder="例如 美剧" />
+                </div>
+                <div>
+                  <div class="head-sub" style="margin-bottom:4px;">默认目录</div>
+                  <el-input v-model="newMode.download_dir" placeholder="/downloads" />
+                </div>
+                <el-button type="primary" plain @click="addMode">新增类型</el-button>
+              </div>
+              <div class="rss-mode-grid">
+                <div class="rss-item" v-for="(m, mode) in config.rss_modes" :key="mode">
+                  <div class="block-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                    <span class="mono">{{ mode }}</span>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                      <el-switch v-model="m.enabled" :active-value="1" :inactive-value="0" />
+                      <el-button type="danger" link @click="removeMode(mode)">删除</el-button>
+                    </div>
+                  </div>
+                  <el-form class="rss-form" label-position="top">
+                    <el-form-item label="名称"><el-input v-model="m.mode_name" /></el-form-item>
+                    <el-form-item label="RSS URL"><el-input v-model="m.rss_url" /></el-form-item>
+                    <el-form-item label="目录"><el-input v-model="m.download_dir" /></el-form-item>
+                  </el-form>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="action-bar">
+            <el-button type="primary" @click="saveConfig" :loading="saving">保存配置</el-button>
+            <el-button @click="activeMenu='main'">返回主功能</el-button>
+          </div>
         </div>
       </el-card>
     </div>
@@ -227,6 +314,7 @@
         },
         rss_modes: {}
       });
+      const newMode = reactive({ mode: '', mode_name: '', download_dir: '/downloads' });
 
       const enabledModes = computed(()=>{
         return Object.entries(config.rss_modes || {})
@@ -244,6 +332,23 @@
         return await resp.json();
       }
 
+      function normalizeModeKey(value){
+        return String(value || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 32);
+      }
+
+      function syncTaskMode(){
+        const found = enabledModes.value.find(x => x.mode === taskForm.mode);
+        if(!found){
+          taskForm.mode = enabledModes.value.length ? enabledModes.value[0].mode : '';
+        }
+      }
+
       function normalizeConfig(input){
         const c = input || {};
         config.tenant_name = c.tenant_name || '';
@@ -255,12 +360,46 @@
           max_retries: Number(c.transmission?.max_retries ?? 3),
           retry_delay: Number(c.transmission?.retry_delay ?? 2),
         };
-        config.rss_modes = c.rss_modes || {};
+        config.rss_modes = {};
+        Object.entries(c.rss_modes || {}).forEach(([mode, modeData])=>{
+          const mk = normalizeModeKey(mode);
+          if(!mk) return;
+          const m = modeData || {};
+          config.rss_modes[mk] = {
+            mode_name: String(m.mode_name || mk),
+            rss_url: String(m.rss_url || ''),
+            download_dir: String(m.download_dir || '/downloads'),
+            enabled: Number(m.enabled) === 1 ? 1 : 0,
+          };
+        });
+        syncTaskMode();
+      }
 
-        const found = enabledModes.value.find(x => x.mode === taskForm.mode);
-        if(!found){
-          taskForm.mode = enabledModes.value.length ? enabledModes.value[0].mode : '';
+      function addMode(){
+        const modeKey = normalizeModeKey(newMode.mode);
+        if(!modeKey){
+          ElementPlus.ElMessage.warning('类型 Key 不能为空（仅支持字母数字下划线）');
+          return;
         }
+        if(config.rss_modes[modeKey]){
+          ElementPlus.ElMessage.warning(`类型 ${modeKey} 已存在`);
+          return;
+        }
+        config.rss_modes[modeKey] = {
+          mode_name: newMode.mode_name.trim() || modeKey,
+          rss_url: '',
+          download_dir: newMode.download_dir.trim() || '/downloads',
+          enabled: 1,
+        };
+        newMode.mode = '';
+        newMode.mode_name = '';
+        newMode.download_dir = '/downloads';
+        syncTaskMode();
+      }
+
+      function removeMode(mode){
+        delete config.rss_modes[mode];
+        syncTaskMode();
       }
 
       async function ensureLogin(){
@@ -295,6 +434,7 @@
           tenant_name: config.tenant_name,
           transmission: { ...config.transmission },
           rss_modes: config.rss_modes,
+          rss_modes_replace: true,
         };
         const d = await api('/api/user/config', {
           method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
@@ -432,6 +572,7 @@
         history,
         taskForm,
         config,
+        newMode,
         enabledModes,
         transmissionStatusLabel,
         transmissionConnected,
@@ -446,6 +587,8 @@
         preview,
         startDownload,
         saveConfig,
+        addMode,
+        removeMode,
         testTransmission,
         downloadOne,
       };

@@ -1,5 +1,6 @@
 ﻿import hashlib
 import json
+import re
 import secrets
 import sqlite3
 from datetime import datetime
@@ -219,15 +220,20 @@ class TenantStore:
         rss_seed.update(seed.get("rss_modes") or {})
         with self._lock, self._connect() as conn:
             now = self._now()
-            conn.execute(
+            cur = conn.execute(
                 "INSERT OR IGNORE INTO tenants(tenant_key, tenant_name, tenant_status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)",
                 ("default", "默认租户", now, now),
             )
+            # Preserve existing tenant configuration. Seed defaults only on first creation.
+            if int(cur.rowcount or 0) == 0:
+                return
+
             tenant_id = self._get_tenant_id(conn, "default")
             if tenant_id is None:
                 return
             for key, value in transmission_seed.items():
                 self._upsert_config(conn, tenant_id, key, str(value))
+
             for mode, mode_data in rss_seed.items():
                 self._upsert_mode(conn, tenant_id, mode, mode_data)
             conn.execute("UPDATE tenants SET updated_at = ? WHERE id = ?", (self._now(), tenant_id))
@@ -506,8 +512,6 @@ class TenantStore:
                     "download_dir": mr["download_dir"],
                     "enabled": int(mr["enabled"]),
                 }
-            for mode, mode_data in DEFAULT_RSS_MODES.items():
-                rss_modes.setdefault(mode, dict(mode_data))
 
             active_key_count = int(
                 conn.execute(
@@ -543,17 +547,80 @@ class TenantStore:
                     (payload["tenant_status"], self._now(), tenant_id),
                 )
 
-            transmission = payload.get("transmission") or {}
-            safe_transmission = {**DEFAULT_TRANSMISSION, **transmission}
-            for key, value in safe_transmission.items():
-                self._upsert_config(conn, tenant_id, key, str(value))
+            transmission_payload = payload.get("transmission")
+            transmission_touched = isinstance(transmission_payload, dict)
+            if transmission_touched:
+                raw_rows = conn.execute(
+                    "SELECT config_key, config_value FROM tenant_configs WHERE tenant_id = ?",
+                    (tenant_id,),
+                ).fetchall()
+                existing = {str(r["config_key"]): r["config_value"] for r in raw_rows}
+                numeric_keys = {"request_timeout", "max_retries", "retry_delay"}
 
-            rss_modes = payload.get("rss_modes") or {}
+                merged: Dict[str, Any] = {}
+                for key, default_value in DEFAULT_TRANSMISSION.items():
+                    base_value = existing.get(key, default_value)
+                    if key in numeric_keys:
+                        try:
+                            base_value = int(base_value)
+                        except (TypeError, ValueError):
+                            base_value = int(default_value)
+                    else:
+                        base_value = str(base_value)
+                    merged[key] = base_value
+
+                for key, incoming in transmission_payload.items():
+                    if key not in DEFAULT_TRANSMISSION:
+                        continue
+                    if key in numeric_keys:
+                        try:
+                            parsed = int(incoming)
+                        except (TypeError, ValueError):
+                            parsed = merged[key]
+                        if key in {"request_timeout", "max_retries"} and parsed < 1:
+                            parsed = 1
+                        if key == "retry_delay" and parsed < 0:
+                            parsed = 0
+                        merged[key] = parsed
+                    else:
+                        merged[key] = str(incoming or "")
+
+                for key, value in merged.items():
+                    self._upsert_config(conn, tenant_id, key, str(value))
+
+            rss_modes_payload = payload.get("rss_modes")
+            rss_modes = rss_modes_payload if isinstance(rss_modes_payload, dict) else {}
+            rss_modes_touched = isinstance(rss_modes_payload, dict)
+            rss_modes_replace = bool(payload.get("rss_modes_replace")) and rss_modes_touched
+
+            normalized_modes: Dict[str, Dict[str, Any]] = {}
             for mode, mode_data in rss_modes.items():
-                merged_mode = {**DEFAULT_RSS_MODES.get(mode, {}), **(mode_data or {})}
-                if not str(merged_mode.get("download_dir", "")).strip():
-                    merged_mode["download_dir"] = "/downloads"
-                self._upsert_mode(conn, tenant_id, mode, merged_mode)
+                mode_key = str(mode or "").strip().lower()
+                if not mode_key:
+                    continue
+                if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,31}", mode_key):
+                    raise ValueError(f"RSS 模式 key 无效: {mode_key}")
+
+                incoming = mode_data or {}
+                merged_mode = {
+                    "mode_name": str(incoming.get("mode_name", mode_key)).strip() or mode_key,
+                    "rss_url": str(incoming.get("rss_url", "")).strip(),
+                    "download_dir": str(incoming.get("download_dir", "")).strip() or "/downloads",
+                    "enabled": 1 if int(incoming.get("enabled", 1)) == 1 else 0,
+                }
+                normalized_modes[mode_key] = merged_mode
+                self._upsert_mode(conn, tenant_id, mode_key, merged_mode)
+
+            if rss_modes_replace:
+                keep_modes = tuple(normalized_modes.keys())
+                if keep_modes:
+                    placeholders = ",".join(["?"] * len(keep_modes))
+                    conn.execute(
+                        f"DELETE FROM tenant_rss_modes WHERE tenant_id = ? AND mode NOT IN ({placeholders})",
+                        (tenant_id, *keep_modes),
+                    )
+                else:
+                    conn.execute("DELETE FROM tenant_rss_modes WHERE tenant_id = ?", (tenant_id,))
 
             conn.execute("UPDATE tenants SET updated_at = ? WHERE id = ?", (self._now(), tenant_id))
             self._log_audit(
@@ -564,8 +631,9 @@ class TenantStore:
                 detail={
                     "updated_name": bool(new_name),
                     "updated_status": payload.get("tenant_status") if payload.get("tenant_status") in {"active", "disabled"} else "",
-                    "updated_transmission": bool(transmission),
-                    "updated_modes": list(rss_modes.keys()),
+                    "updated_transmission": transmission_touched,
+                    "updated_modes": list(normalized_modes.keys()) if rss_modes_touched else [],
+                    "rss_modes_replace": rss_modes_replace,
                 },
             )
         return self.get_tenant_config(tenant_key)
@@ -891,3 +959,4 @@ class TenantStore:
             )
 
             return {"job_key": job_key, "total": len(payload), "imported": imported, "skipped": skipped, "message": "迁移完成"}
+
