@@ -39,30 +39,6 @@
 
   <el-row :gutter="12">
     <el-col :xs="24" :lg="9">
-      <el-card shadow="never" style="margin-bottom:12px;">
-        <template #header><b>新增租户</b></template>
-        <el-form label-position="top">
-          <el-row :gutter="10">
-            <el-col :xs="24" :md="12">
-              <el-form-item label="租户 Key">
-                <el-input v-model="createForm.tenant_key" placeholder="例如 team_a" />
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :md="12">
-              <el-form-item label="租户名称">
-                <el-input v-model="createForm.tenant_name" placeholder="例如 A组" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-form-item label="复制配置来源">
-            <el-input v-model="createForm.copy_from" placeholder="default" />
-          </el-form-item>
-
-          <el-button type="primary" :loading="createLoading" @click="createTenant">创建租户</el-button>
-        </el-form>
-      </el-card>
-
       <el-card shadow="never">
         <template #header><b>旧历史迁移</b></template>
         <el-form label-position="top">
@@ -125,7 +101,7 @@
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <script src="https://unpkg.com/element-plus@latest/dist/index.full.min.js"></script>
 <script>
-  const { createApp, reactive, ref, onMounted } = Vue;
+  const { createApp, ref, onMounted } = Vue;
 
   createApp({
     setup(){
@@ -135,14 +111,8 @@
       const audits = ref([]);
       const tenantLoading = ref(false);
       const auditLoading = ref(false);
-      const createLoading = ref(false);
       const migrateLoading = ref(false);
 
-      const createForm = reactive({
-        tenant_key: '',
-        tenant_name: '',
-        copy_from: 'default'
-      });
       const migrateTenant = ref('default');
 
       async function api(url, options={}){
@@ -155,30 +125,6 @@
         if(!d.success){ location.href='/admin/login'; return false; }
         adminWho.value = `管理员：${d.username}`;
         return true;
-      }
-
-      async function createTenant(){
-        if(!createForm.tenant_key.trim()){
-          ElementPlus.ElMessage.warning('请填写租户 Key');
-          return;
-        }
-        createLoading.value = true;
-        const payload = {
-          tenant_key: createForm.tenant_key.trim().toLowerCase(),
-          tenant_name: createForm.tenant_name.trim(),
-          copy_from: (createForm.copy_from || 'default').trim().toLowerCase() || 'default'
-        };
-        const d = await api('/api/admin/tenants', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        });
-        createLoading.value = false;
-        if(!d.success){ ElementPlus.ElMessage.error(d.message || '创建失败'); return; }
-        ElementPlus.ElMessage.success('创建成功');
-        createForm.tenant_key = '';
-        createForm.tenant_name = '';
-        await refreshAll();
       }
 
       async function setStatus(tenantKey, status){
@@ -277,11 +223,8 @@
         audits,
         tenantLoading,
         auditLoading,
-        createLoading,
         migrateLoading,
-        createForm,
         migrateTenant,
-        createTenant,
         setStatus,
         delTenant,
         hardDelTenant,
