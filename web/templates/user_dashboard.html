@@ -7,56 +7,160 @@
   <title>用户控制台 - RSS Downloader</title>
   <link rel="stylesheet" href="https://unpkg.com/element-plus@latest/dist/index.css" />
   <style>
+    *{box-sizing:border-box}
+    :root{
+      --bg-1:#edf5ff;
+      --bg-2:#f2f8f5;
+      --surface:#ffffff;
+      --surface-soft:#f8fbff;
+      --text-main:#0f172a;
+      --text-sub:#64748b;
+      --line:#d8e4f2;
+      --primary:#2563eb;
+      --primary-2:#0891b2;
+      --shadow:0 10px 26px rgba(15,23,42,.06);
+    }
     body{
       margin:0;
-      font-family:"Segoe UI","Microsoft YaHei",sans-serif;
-      background:linear-gradient(120deg,#e8f4ff 0%,#f7f8fb 48%,#e7fbf2 100%);
-      color:#1f2937;
+      font-family:"HarmonyOS Sans SC","PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+      background:
+        radial-gradient(circle at 8% 6%, var(--bg-1) 0%, transparent 30%),
+        radial-gradient(circle at 90% 8%, #eef9ff 0%, transparent 28%),
+        linear-gradient(180deg,#f7fafc 0%, var(--bg-2) 100%);
+      color:var(--text-main);
       min-height:100vh;
+      overflow-x:hidden;
     }
-    .page{max-width:1320px;margin:0 auto;padding:16px}
-    .top{margin-bottom:12px}
-    .head-title{font-size:20px;font-weight:700}
-    .head-sub{font-size:13px;color:#6b7280;margin-top:4px}
-    .main-wrap{display:grid;grid-template-columns:220px 1fr;gap:12px}
-    .menu-card .el-menu{border-right:none}
-    .panel{display:grid;gap:12px}
-    .rss-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .page{
+      width:min(100%, 1400px);
+      max-width:1400px;
+      margin:0 auto;
+      padding:clamp(10px,2vw,18px);
+    }
+    .top{
+      margin-bottom:12px;
+      border-radius:16px;
+      border:0;
+      background:linear-gradient(130deg,#0f172a 0%, #1d4ed8 52%, #0891b2 100%);
+      box-shadow:0 14px 30px rgba(37,99,235,.28);
+    }
+    .top-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .head-title{font-size:20px;font-weight:800;color:var(--text-main);letter-spacing:.1px}
+    .head-sub{font-size:13px;color:var(--text-sub);margin-top:4px}
+    .top .head-title{font-size:24px;color:#f8fbff;letter-spacing:.2px}
+    .top .head-sub{color:rgba(241,245,249,.9)}
+    .main-wrap{display:grid;grid-template-columns:188px minmax(0,1fr);gap:14px}
+    .main-wrap > *{min-width:0}
+    .menu-card{
+      border-radius:16px;
+      border:0;
+      background:linear-gradient(180deg,#0f172a 0%,#1e293b 100%);
+      box-shadow:0 12px 24px rgba(15,23,42,.22);
+      position:sticky;
+      top:12px;
+      align-self:start;
+    }
+    .menu-card .el-card__body{padding:14px 12px}
+    .menu-card .el-menu{
+      border-right:none;
+      background:transparent;
+      --el-menu-bg-color:transparent;
+      --el-menu-text-color:#cbd5e1;
+      --el-menu-hover-text-color:#ffffff;
+      --el-menu-active-color:#ffffff;
+    }
+    .menu-card .block-title{color:#e2e8f0;font-size:16px;margin-bottom:8px}
+    .menu-card .el-menu-item{
+      border-radius:10px;
+      margin-bottom:4px;
+      height:40px;
+      line-height:40px;
+      color:#cbd5e1;
+      font-weight:600;
+    }
+    .menu-card .el-menu-item.is-active{
+      background:linear-gradient(90deg,var(--primary) 0%, var(--primary-2) 100%);
+      color:#ffffff !important;
+    }
+    .panel .el-card{
+      border-radius:16px;
+      border:1px solid var(--line);
+      background:var(--surface);
+      box-shadow:var(--shadow);
+    }
+    .panel .el-card__header{
+      padding:14px 18px;
+      border-bottom:1px solid #e8eef6;
+      background:linear-gradient(180deg,#f8fbff 0%, #f7faff 100%);
+    }
+    .panel .el-card__body{padding:16px 18px}
+    .top .el-card__body{padding:18px}
+    .top .el-tag{
+      border:1px solid rgba(255,255,255,.3);
+      background:rgba(255,255,255,.16);
+      color:#ffffff;
+    }
+    .top-actions .el-button{
+      border-color:rgba(255,255,255,.45);
+      background:rgba(255,255,255,.14);
+      color:#ffffff;
+    }
+    .top-actions .el-button:hover{
+      background:rgba(255,255,255,.26);
+      color:#ffffff;
+    }
+    .panel{display:grid;gap:12px;min-width:0}
+    .task-form .el-form-item{
+      margin-right:0;
+      margin-bottom:10px;
+    }
+    .task-input{width:260px}
+    .rss-mode-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:12px}
     .rss-item{
-      border:1px solid #dbe4f0;
+      border:1px solid #d7e2f0;
       border-radius:14px;
-      padding:12px;
-      background:linear-gradient(180deg,#fbfcff 0%,#f7fbff 100%);
-      box-shadow:0 4px 12px rgba(15,23,42,.04);
+      padding:14px;
+      background:linear-gradient(180deg,#fafdff 0%,#f6fbff 100%);
+      box-shadow:0 6px 14px rgba(15,23,42,.04);
       transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease;
     }
     .rss-item:hover{
       transform:translateY(-2px);
-      border-color:#c6d4ea;
-      box-shadow:0 10px 18px rgba(15,23,42,.08);
+      border-color:#bfd0e8;
+      box-shadow:0 10px 22px rgba(15,23,42,.08);
     }
-    .config-shell{display:grid;gap:12px}
+    .config-shell{display:grid;gap:14px}
     .config-head{
       display:flex;
       justify-content:space-between;
       gap:10px;
-      align-items:flex-start;
+      align-items:center;
       flex-wrap:wrap;
+      padding-bottom:10px;
+      border-bottom:1px solid #e5ecf5;
     }
-    .config-title{font-size:18px;font-weight:700;color:#1f2937}
-    .config-desc{font-size:13px;color:#64748b;margin-top:4px}
-    .config-grid{display:grid;gap:12px}
+    .config-title{font-size:22px;font-weight:800;color:#0f172a}
+    .config-desc{font-size:13px;color:var(--text-sub);margin-top:2px}
+    .config-grid{display:grid;gap:14px}
     .config-block{
-      border:1px solid #dce6f2;
-      border-radius:14px;
-      padding:14px;
-      background:#fcfdff;
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:16px;
+      background:var(--surface-soft);
+      box-shadow:0 4px 14px rgba(15,23,42,.03);
     }
     .config-block.trans{
-      background:linear-gradient(135deg,#f4fbff 0%,#f8fff9 100%);
+      background:linear-gradient(135deg,#f3faff 0%,#f7fffa 100%);
     }
     .config-block.rss{
-      background:linear-gradient(135deg,#f9fbff 0%,#fefeff 100%);
+      background:linear-gradient(135deg,#f8fbff 0%,#fdfdff 100%);
     }
     .action-bar{
       margin-top:12px;
@@ -68,34 +172,124 @@
       flex-wrap:wrap;
     }
     .tenant-form-compact .el-form-item{max-width:420px;margin-bottom:0}
+    .tenant-form-compact .el-form-item__label{font-weight:600}
     .trans-form .el-form-item,
     .rss-form .el-form-item{margin-bottom:12px}
     .trans-form .el-input,
     .trans-form .el-input-number{width:100%}
-    .rss-toolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
-    .block-title{font-size:14px;font-weight:700;color:#374151;margin-bottom:10px}
+    .rss-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap}
+    .block-title{font-size:18px;font-weight:800;color:#0f172a;margin-bottom:10px;letter-spacing:.2px}
     .mono{font-family:Consolas,Menlo,monospace}
+    .table-wrap{
+      width:100%;
+      overflow-x:hidden;
+      -webkit-overflow-scrolling:touch;
+    }
+    .table-wrap .el-table{width:100% !important}
+    .table-wrap .el-table .cell{
+      white-space:normal;
+      word-break:break-word;
+    }
+    .table-wrap .el-table{
+      --el-table-header-bg-color:#f3f8ff;
+      --el-table-header-text-color:#475569;
+      --el-table-row-hover-bg-color:#f8fbff;
+      --el-table-border-color:#e4ebf5;
+      border-radius:12px;
+      overflow:hidden;
+    }
+    .history-desc{margin-bottom:10px}
+    .downloader-table .el-input__wrapper,
+    .downloader-table .el-select .el-input__wrapper,
+    .downloader-table .el-input-number{
+      border-radius:10px;
+    }
+    .downloader-table .el-input-number{width:100%}
+    .downloader-table .el-input,
+    .downloader-table .el-select,
+    .downloader-table .el-input-number{
+      width:100%;
+    }
+    .rss-item .el-form-item__label{font-weight:600;color:#334155}
+    .el-input__wrapper,
+    .el-textarea__inner,
+    .el-select .el-input__wrapper,
+    .el-input-number{
+      border-radius:10px;
+    }
+    .el-input__wrapper.is-focus,
+    .el-select .el-input.is-focus .el-input__wrapper{
+      box-shadow:0 0 0 1px rgba(37,99,235,.35) inset;
+    }
+    .rss-mode-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      margin-bottom:10px;
+    }
+    .history-list-item{
+      padding:6px 2px;
+      border-bottom:1px dashed #e5e7eb;
+    }
+    .history-list-item.failed{padding:8px 2px}
+    .pager-wrap{
+      margin-top:10px;
+      display:flex;
+      justify-content:flex-end;
+    }
     @media (max-width:1000px){
       .main-wrap{grid-template-columns:1fr}
-      .rss-mode-grid{grid-template-columns:1fr}
+      .menu-card{position:static}
+    }
+    @media (max-width:768px){
+      .head-title{font-size:18px}
+      .top-actions{width:100%}
+      .top-actions .el-button{
+        flex:1;
+        min-width:0;
+      }
+      .task-form{display:block}
+      .task-form .el-form-item{width:100%;margin-bottom:8px}
+      .task-form .el-select,
+      .task-form .el-input,
+      .task-input{
+        width:100% !important;
+        min-width:0 !important;
+      }
+      .config-block{padding:12px}
+      .action-bar .el-button{
+        flex:1;
+        min-width:118px;
+      }
+      .history-list-item,
+      .history-list-item.failed{padding:7px 2px}
+      .block-title{font-size:18px}
+      .pager-wrap{justify-content:center}
+    }
+    @media (max-width:560px){
+      .head-sub{font-size:12px}
+      .top-actions{gap:6px}
+      .top-actions .el-button{padding-left:10px;padding-right:10px}
+      .table-wrap{margin:0 -2px}
     }
   </style>
 </head>
 <body>
 <div id="app" class="page">
   <el-card class="top" shadow="never">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+    <div class="top-head">
       <div>
         <div class="head-title">租户用户控制台</div>
         <div class="head-sub">{{ who }}</div>
         <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')">
-            Transmission：{{ transmissionStatusLabel }}
+            {{ downloaderLabel }}：{{ transmissionStatusLabel }}
           </el-tag>
           <span class="head-sub" v-if="transmissionHost">Host: {{ transmissionHost }}</span>
         </div>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div class="top-actions">
         <el-button type="warning" plain @click="openPasswordDialog">账号安全</el-button>
         <el-button @click="refreshAll">刷新</el-button>
         <el-button type="danger" plain @click="logout">退出登录</el-button>
@@ -117,14 +311,19 @@
         <template #header>
           <div class="block-title" style="margin:0;">下载任务</div>
         </template>
-        <el-form :inline="true" label-width="70px">
+        <el-form :inline="true" label-width="70px" class="task-form">
           <el-form-item label="模式">
-            <el-select v-model="taskForm.mode" placeholder="请选择模式" style="min-width:240px">
+            <el-select v-model="taskForm.mode" placeholder="请选择模式" class="task-input">
               <el-option v-for="m in enabledModes" :key="m.mode" :label="`${m.mode_name} (${m.mode})`" :value="m.mode" />
             </el-select>
           </el-form-item>
+          <el-form-item label="下载器">
+            <el-select v-model="taskForm.downloader_id" placeholder="请选择下载器" class="task-input">
+              <el-option v-for="d in downloaderOptions" :key="d.id" :label="d.label" :value="d.id" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="关键词">
-            <el-input v-model="taskForm.keywords" placeholder="空格或逗号分隔" style="min-width:260px" />
+            <el-input v-model="taskForm.keywords" placeholder="空格或逗号分隔" class="task-input" />
           </el-form-item>
           <el-form-item>
             <el-button @click="preview" :loading="previewLoading">预览 RSS</el-button>
@@ -140,59 +339,91 @@
             RSS 预览 {{ previewModeName ? `- ${previewModeName}` : '' }}（已显示 {{ previewItems.length }} / 总计 {{ previewTotal }}）
           </div>
         </template>
-        <el-table
-          :data="previewItems"
-          stripe
-          style="width:100%"
-          v-loading="previewLoading"
-          empty-text="暂无预览数据"
-          table-layout="auto"
-          :tooltip-options="{ placement: 'top' }"
-        >
-          <el-table-column label="中文名称" min-width="280" show-overflow-tooltip>
-            <template #default="scope">
-              <span>{{ scope.row.chinese_name || scope.row.title || '未命名种子' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="title" label="原标题" min-width="320" show-overflow-tooltip />
-          <el-table-column label="操作" width="100">
-            <template #default="scope">
-              <el-button type="primary" link @click="downloadOne(scope.row)">下载</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="table-wrap">
+          <el-table
+            :data="previewItems"
+            stripe
+            style="width:100%"
+            v-loading="previewLoading"
+            empty-text="暂无预览数据"
+            table-layout="auto"
+            :tooltip-options="{ placement: 'top' }"
+          >
+            <el-table-column label="中文名称" min-width="280" show-overflow-tooltip>
+              <template #default="scope">
+                <span>{{ scope.row.chinese_name || scope.row.title || '未命名种子' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="title" label="原标题" min-width="320" show-overflow-tooltip />
+            <el-table-column label="操作" width="100">
+              <template #default="scope">
+                <el-button type="primary" link @click="downloadOne(scope.row)">下载</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <div class="pager-wrap">
+          <el-pagination
+            background
+            layout="prev, pager, next, jumper, ->, total"
+            :current-page="previewPager.page"
+            :page-size="previewPager.page_size"
+            :total="previewTotal"
+            :hide-on-single-page="true"
+            @current-change="onPreviewPageChange"
+          />
+        </div>
       </el-card>
 
       <el-card shadow="never">
         <template #header>
           <div class="block-title" style="margin:0;">下载历史</div>
         </template>
-        <el-table :data="history" stripe style="width:100%" empty-text="暂无历史">
-          <el-table-column label="类型" width="110">
-            <template #default="scope">
-              <el-tag :type="scope.row.trigger === 'schedule' ? 'warning' : 'success'" effect="light">
-                {{ scope.row.trigger === 'schedule' ? '定时任务' : '手动下载' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="模式" min-width="220">
-            <template #default="scope">
-              <div>{{ scope.row.mode_name || scope.row.mode || '-' }}</div>
-              <div class="head-sub" v-if="scope.row.trigger === 'schedule' && scope.row.schedule_name">计划：{{ scope.row.schedule_name }}</div>
-            </template>
-          </el-table-column>
-          <el-table-column label="统计" min-width="260">
-            <template #default="scope">
-              新增 {{ scope.row.statistics?.added_count ?? 0 }} / 跳过 {{ scope.row.statistics?.skipped_count ?? 0 }} / 失败 {{ scope.row.statistics?.failed_count ?? 0 }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="time" label="时间" width="180" />
-          <el-table-column label="操作" width="100">
-            <template #default="scope">
-              <el-button type="primary" link @click="openHistoryDetail(scope.row)">详情</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="table-wrap table-history">
+          <el-table :data="history" stripe style="width:100%" empty-text="暂无历史">
+            <el-table-column label="类型" width="110">
+              <template #default="scope">
+                <el-tag :type="scope.row.trigger === 'schedule' ? 'warning' : 'success'" effect="light">
+                  {{ scope.row.trigger === 'schedule' ? '定时任务' : '手动下载' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="模式" min-width="170">
+              <template #default="scope">
+                <div>{{ scope.row.mode_name || scope.row.mode || '-' }}</div>
+                <div class="head-sub" v-if="scope.row.trigger === 'schedule' && scope.row.schedule_name">计划：{{ scope.row.schedule_name }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="统计" min-width="160">
+              <template #default="scope">
+                新增 {{ scope.row.statistics?.added_count ?? 0 }} / 跳过 {{ scope.row.statistics?.skipped_count ?? 0 }} / 失败 {{ scope.row.statistics?.failed_count ?? 0 }}
+              </template>
+            </el-table-column>
+            <el-table-column label="下载器" min-width="150">
+              <template #default="scope">
+                <div>{{ scope.row.downloader_name || scope.row.downloader_id || '-' }}</div>
+                <div class="head-sub">{{ scope.row.downloader_type_label || '-' }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="time" label="时间" width="150" />
+            <el-table-column label="操作" width="76">
+              <template #default="scope">
+                <el-button type="primary" link @click="openHistoryDetail(scope.row)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <div class="pager-wrap">
+          <el-pagination
+            background
+            layout="prev, pager, next, jumper, ->, total"
+            :current-page="historyPager.page"
+            :page-size="historyPager.page_size"
+            :total="historyPager.total"
+            :hide-on-single-page="true"
+            @current-change="onHistoryPageChange"
+          />
+        </div>
       </el-card>
     </div>
 
@@ -202,7 +433,7 @@
           <div class="config-head">
             <div>
               <div class="config-title">配置中心</div>
-              <div class="config-desc">建议先测试 Transmission 连通性，再保存配置。</div>
+              <div class="config-desc">建议先测试下载器连通性，再保存配置。</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')" effect="light">
@@ -228,26 +459,80 @@
             </div>
 
             <div class="config-block trans">
-              <div class="block-title" style="margin-bottom:8px;">Transmission</div>
-              <el-form class="trans-form" label-position="top">
-                <el-row :gutter="10">
-                  <el-col :xs="24" :md="12"><el-form-item label="Host"><el-input v-model="config.transmission.host" placeholder="http://127.0.0.1:9091" /></el-form-item></el-col>
-                  <el-col :xs="24" :md="6"><el-form-item label="用户名"><el-input v-model="config.transmission.username" placeholder="可选" /></el-form-item></el-col>
-                  <el-col :xs="24" :md="6"><el-form-item label="密码"><el-input v-model="config.transmission.password" type="password" show-password placeholder="可选" /></el-form-item></el-col>
-                </el-row>
-                <el-row :gutter="10">
-                  <el-col :xs="24" :md="8"><el-form-item label="超时"><el-input-number v-model="config.transmission.request_timeout" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
-                  <el-col :xs="24" :md="8"><el-form-item label="重试次数"><el-input-number v-model="config.transmission.max_retries" :min="1" :step="1" style="width:100%" /></el-form-item></el-col>
-                  <el-col :xs="24" :md="8"><el-form-item label="重试间隔"><el-input-number v-model="config.transmission.retry_delay" :min="0" :step="1" style="width:100%" /></el-form-item></el-col>
-                </el-row>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                  <el-button @click="testTransmission" :loading="testingTransmission">测试 Transmission 连接</el-button>
-                  <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')">
-                    当前状态：{{ transmissionStatusLabel }}
-                  </el-tag>
-                  <span class="head-sub">{{ transmissionStatusMessage }}</span>
-                </div>
-              </el-form>
+              <div class="block-title" style="margin-bottom:8px;">下载器配置</div>
+              <div class="rss-toolbar" style="justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <el-tag type="info" effect="plain">当前下载器数：{{ config.downloaders.length }}</el-tag>
+                <el-button type="primary" plain @click="openAddDownloaderDialog">新增下载器</el-button>
+              </div>
+              <el-empty v-if="!config.downloaders.length" description="请先新增下载器" :image-size="72"></el-empty>
+              <div class="table-wrap table-wide" v-else>
+                <el-table :data="config.downloaders" size="small" stripe style="width:100%" class="downloader-table">
+                  <el-table-column label="默认" width="72">
+                    <template #default="scope">
+                      <el-tag v-if="scope.row.id === config.active_downloader_id" type="success">默认</el-tag>
+                      <el-button v-else type="primary" link @click="setActiveDownloader(scope.row.id)">设为默认</el-button>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="名称" min-width="90">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.name" placeholder="下载器名称" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="类型" width="110">
+                    <template #default="scope">
+                      <el-select v-model="scope.row.backend_type" style="width:100%">
+                        <el-option label="Transmission" value="transmission" />
+                        <el-option label="qBittorrent" value="qbittorrent" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="Host" min-width="140">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.host" :placeholder="scope.row.backend_type === 'qbittorrent' ? 'http://127.0.0.1:8080' : 'http://127.0.0.1:9091'" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="用户名" min-width="88">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.username" placeholder="可选" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="密码" min-width="88">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.password" type="password" show-password placeholder="可选" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="超时" width="88">
+                    <template #default="scope">
+                      <el-input-number v-model="scope.row.request_timeout" :min="1" :step="1" controls-position="right" style="width:100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="重试" width="88">
+                    <template #default="scope">
+                      <el-input-number v-model="scope.row.max_retries" :min="1" :step="1" controls-position="right" style="width:100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="间隔" width="88">
+                    <template #default="scope">
+                      <el-input-number v-model="scope.row.retry_delay" :min="0" :step="1" controls-position="right" style="width:100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="110">
+                    <template #default="scope">
+                      <div class="rss-toolbar" style="margin:0;justify-content:flex-start;gap:4px;">
+                        <el-button type="primary" link @click="testDownloader(scope.row)">测试</el-button>
+                        <el-button type="danger" link @click="removeDownloaderConfirm(scope.row.id)">删除</el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;">
+                <el-button @click="testTransmission" :loading="testingTransmission">测试默认下载器连接</el-button>
+                <el-tag :type="transmissionConnected===true ? 'success' : (transmissionConnected===false ? 'danger' : 'info')">
+                  默认状态：{{ transmissionStatusLabel }}
+                </el-tag>
+                <span class="head-sub">{{ transmissionStatusMessage }}</span>
+              </div>
             </div>
 
             <div class="config-block rss">
@@ -263,7 +548,7 @@
               ></el-empty>
               <div class="rss-mode-grid" v-if="rssModeCards.length">
                 <div class="rss-item" v-for="item in rssModeCards" :key="item.mode">
-                  <div class="block-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                  <div class="rss-mode-head">
                     <span class="mono">{{ item.mode }}</span>
                     <div style="display:flex;gap:6px;align-items:center;">
                       <el-switch v-model="item.data.enabled" :active-value="1" :inactive-value="0" />
@@ -275,9 +560,6 @@
                     <el-form-item label="RSS URL"><el-input v-model="item.data.rss_url" /></el-form-item>
                     <el-form-item label="目录"><el-input v-model="item.data.download_dir" /></el-form-item>
                   </el-form>
-                  <div style="display:flex;justify-content:flex-end;">
-                    <el-button type="danger" plain @click="removeModeConfirm(item.mode)">删除此类型</el-button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -294,40 +576,49 @@
                 description="暂无自动下载计划"
                 :image-size="72"
               ></el-empty>
-              <el-table v-else :data="config.schedules" size="small" stripe style="width:100%">
-                <el-table-column label="计划名称" min-width="180">
-                  <template #default="scope">
-                    <el-input v-model="scope.row.schedule_name" placeholder="例如：每日成人收藏" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="RSS 类型" min-width="180">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.mode" placeholder="请选择类型" style="width:100%">
-                      <el-option v-for="m in allModes" :key="m.mode" :label="`${m.mode_name} (${m.mode})`" :value="m.mode" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="执行时间" width="130">
-                  <template #default="scope">
-                    <el-input v-model="scope.row.run_time" placeholder="03:30" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="关键词（可空）" min-width="220">
-                  <template #default="scope">
-                    <el-input v-model="scope.row.keywords_text" placeholder="空格或逗号分隔" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="启用" width="90">
-                  <template #default="scope">
-                    <el-switch v-model="scope.row.enabled" :active-value="1" :inactive-value="0" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="90">
-                  <template #default="scope">
-                    <el-button type="danger" link @click="removeScheduleConfirm(scope.$index)">删除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
+              <div class="table-wrap table-wide" v-else>
+                <el-table :data="config.schedules" size="small" stripe style="width:100%">
+                  <el-table-column label="计划名称" min-width="120">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.schedule_name" placeholder="例如：每日成人收藏" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="RSS 类型" min-width="130">
+                    <template #default="scope">
+                      <el-select v-model="scope.row.mode" placeholder="请选择类型" style="width:100%">
+                        <el-option v-for="m in allModes" :key="m.mode" :label="`${m.mode_name} (${m.mode})`" :value="m.mode" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="下载器" min-width="150">
+                    <template #default="scope">
+                      <el-select v-model="scope.row.downloader_id" placeholder="请选择下载器" style="width:100%">
+                        <el-option v-for="d in downloaderOptions" :key="d.id" :label="d.label" :value="d.id" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="执行时间" width="92">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.run_time" placeholder="03:30" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="关键词（可空）" min-width="120">
+                    <template #default="scope">
+                      <el-input v-model="scope.row.keywords_text" placeholder="空格或逗号分隔" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="启用" width="64">
+                    <template #default="scope">
+                      <el-switch v-model="scope.row.enabled" :active-value="1" :inactive-value="0" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="68">
+                    <template #default="scope">
+                      <el-button type="danger" link @click="removeScheduleConfirm(scope.$index)">删除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
             </div>
           </div>
 
@@ -336,7 +627,7 @@
             <el-button @click="activeMenu='main'">返回主功能</el-button>
           </div>
 
-          <el-dialog v-model="addModeVisible" title="新增 RSS 类型" width="560px">
+          <el-dialog v-model="addModeVisible" title="新增 RSS 类型" width="min(560px, 96vw)">
             <el-form label-position="top">
               <el-form-item label="类型名称">
                 <el-input v-model="newMode.mode" placeholder="例如：日剧 / 纪录片（支持中文）" />
@@ -357,7 +648,30 @@
             </template>
           </el-dialog>
 
-          <el-dialog v-model="addScheduleVisible" title="新增每日自动下载计划" width="560px">
+          <el-dialog v-model="addDownloaderVisible" title="新增下载器" width="min(560px, 96vw)">
+            <el-form label-position="top">
+              <el-form-item label="下载器名称">
+                <el-input v-model="newDownloader.name" placeholder="例如：客厅 transmission" />
+              </el-form-item>
+              <el-form-item label="下载器类型">
+                <el-select v-model="newDownloader.backend_type" style="width:100%">
+                  <el-option label="Transmission" value="transmission" />
+                  <el-option label="qBittorrent" value="qbittorrent" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="Host">
+                <el-input v-model="newDownloader.host" :placeholder="newDownloader.backend_type === 'qbittorrent' ? 'http://127.0.0.1:8080' : 'http://127.0.0.1:9091'" />
+              </el-form-item>
+              <el-form-item label="用户名"><el-input v-model="newDownloader.username" placeholder="可选" /></el-form-item>
+              <el-form-item label="密码"><el-input v-model="newDownloader.password" type="password" show-password placeholder="可选" /></el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="addDownloaderVisible=false">取消</el-button>
+              <el-button type="primary" @click="confirmAddDownloader">确认新增</el-button>
+            </template>
+          </el-dialog>
+
+          <el-dialog v-model="addScheduleVisible" title="新增每日自动下载计划" width="min(560px, 96vw)">
             <el-form label-position="top">
               <el-form-item label="计划名称">
                 <el-input v-model="newSchedule.schedule_name" placeholder="例如：每日电影收藏" />
@@ -365,6 +679,11 @@
               <el-form-item label="RSS 类型">
                 <el-select v-model="newSchedule.mode" placeholder="请选择类型" style="width:100%">
                   <el-option v-for="m in allModes" :key="m.mode" :label="`${m.mode_name} (${m.mode})`" :value="m.mode" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="下载器">
+                <el-select v-model="newSchedule.downloader_id" placeholder="请选择下载器" style="width:100%">
+                  <el-option v-for="d in downloaderOptions" :key="d.id" :label="d.label" :value="d.id" />
                 </el-select>
               </el-form-item>
               <el-form-item label="执行时间（每日）">
@@ -387,7 +706,7 @@
     </div>
   </div>
 
-  <el-dialog v-model="passwordDialogVisible" title="账号安全" width="560px" @closed="resetPasswordForm">
+  <el-dialog v-model="passwordDialogVisible" title="账号安全" width="min(560px, 96vw)" @closed="resetPasswordForm">
     <div class="head-sub" style="margin-bottom:8px;">修改后，下次登录请使用新密码。</div>
     <el-form label-position="top">
       <el-row :gutter="10">
@@ -414,13 +733,15 @@
     </template>
   </el-dialog>
 
-  <el-dialog v-model="historyDetailVisible" title="下载历史详情" width="820px">
+  <el-dialog v-model="historyDetailVisible" title="下载历史详情" width="min(860px, 96vw)">
     <template v-if="historyDetail">
-      <el-descriptions :column="2" border size="small" style="margin-bottom:10px;">
+      <el-descriptions :column="historyDescColumns" border size="small" class="history-desc">
         <el-descriptions-item label="类型">{{ historyDetail.trigger === 'schedule' ? '定时任务' : '手动下载' }}</el-descriptions-item>
         <el-descriptions-item label="模式">{{ historyDetail.mode_name || historyDetail.mode || '-' }}</el-descriptions-item>
         <el-descriptions-item label="时间">{{ historyDetail.time || '-' }}</el-descriptions-item>
         <el-descriptions-item label="计划名">{{ historyDetail.schedule_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="下载器">{{ historyDetail.downloader_name || historyDetail.downloader_id || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="下载器类型">{{ historyDetail.downloader_type_label || '-' }}</el-descriptions-item>
         <el-descriptions-item label="新增">{{ historyDetail.statistics?.added_count ?? 0 }}</el-descriptions-item>
         <el-descriptions-item label="跳过">{{ historyDetail.statistics?.skipped_count ?? 0 }}</el-descriptions-item>
         <el-descriptions-item label="失败">{{ historyDetail.statistics?.failed_count ?? 0 }}</el-descriptions-item>
@@ -430,7 +751,7 @@
         <el-tab-pane label="成功下载" name="added">
           <el-empty v-if="!(historyDetail.added_torrents || []).length" description="无新增下载"></el-empty>
           <el-scrollbar v-else max-height="260px">
-            <div v-for="(name, idx) in historyDetail.added_torrents" :key="`a_${idx}`" style="padding:6px 2px;border-bottom:1px dashed #e5e7eb;">
+            <div v-for="(name, idx) in historyDetail.added_torrents" :key="`a_${idx}`" class="history-list-item">
               {{ idx + 1 }}. {{ name }}
             </div>
           </el-scrollbar>
@@ -438,7 +759,7 @@
         <el-tab-pane label="跳过条目" name="skipped">
           <el-empty v-if="!(historyDetail.skipped_torrents || []).length" description="无跳过条目"></el-empty>
           <el-scrollbar v-else max-height="260px">
-            <div v-for="(name, idx) in historyDetail.skipped_torrents" :key="`s_${idx}`" style="padding:6px 2px;border-bottom:1px dashed #e5e7eb;">
+            <div v-for="(name, idx) in historyDetail.skipped_torrents" :key="`s_${idx}`" class="history-list-item">
               {{ idx + 1 }}. {{ name }}
             </div>
           </el-scrollbar>
@@ -446,7 +767,7 @@
         <el-tab-pane label="失败详情" name="failed">
           <el-empty v-if="!(historyDetail.failed_torrents || []).length" description="无失败条目"></el-empty>
           <el-scrollbar v-else max-height="260px">
-            <div v-for="(item, idx) in historyDetail.failed_torrents" :key="`f_${idx}`" style="padding:8px 2px;border-bottom:1px dashed #e5e7eb;">
+            <div v-for="(item, idx) in historyDetail.failed_torrents" :key="`f_${idx}`" class="history-list-item failed">
               <div><b>{{ idx + 1 }}. {{ item.title || '未命名' }}</b></div>
               <div class="head-sub">原因：{{ item.error || '-' }}</div>
             </div>
@@ -463,7 +784,7 @@
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <script src="https://unpkg.com/element-plus@latest/dist/index.full.min.js"></script>
 <script>
-  const { createApp, reactive, ref, computed, onMounted } = Vue;
+  const { createApp, reactive, ref, computed, onMounted, onBeforeUnmount } = Vue;
 
   createApp({
     setup(){
@@ -472,6 +793,11 @@
       const progressText = ref('等待中');
       const previewModeName = ref('');
       const previewTotal = ref(0);
+      const PREVIEW_PAGE_SIZE = 50;
+      const HISTORY_PAGE_SIZE = 20;
+      const previewPager = reactive({ page: 1, page_size: PREVIEW_PAGE_SIZE });
+      const historyPager = reactive({ page: 1, page_size: HISTORY_PAGE_SIZE, total: 0 });
+      const previewAllItems = ref([]);
       const previewItems = ref([]);
       const history = ref([]);
       const taskId = ref('');
@@ -482,6 +808,7 @@
       const changingPassword = ref(false);
       const addModeVisible = ref(false);
       const addScheduleVisible = ref(false);
+      const addDownloaderVisible = ref(false);
       const passwordDialogVisible = ref(false);
       const historyDetailVisible = ref(false);
       const historyDetailTab = ref('added');
@@ -489,19 +816,38 @@
       const transmissionConnected = ref(null);
       const transmissionHost = ref('');
       const transmissionStatusMessage = ref('');
+      const getViewportWidth = () => (typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : 1280);
+      const viewportWidth = ref(getViewportWidth());
 
-      const taskForm = reactive({ mode: '', keywords: '' });
+      const taskForm = reactive({ mode: '', downloader_id: '', keywords: '' });
       const passwordForm = reactive({ old_password: '', new_password: '', confirm_password: '' });
       const config = reactive({
         tenant_name: '',
         transmission: {
-          host: '', username: '', password: '', request_timeout: 30, max_retries: 3, retry_delay: 2
+          id: 'default',
+          name: '默认下载器',
+          backend_type: 'transmission',
+          host: '',
+          username: '',
+          password: '',
+          request_timeout: 30,
+          max_retries: 3,
+          retry_delay: 2
         },
+        downloaders: [],
+        active_downloader_id: '',
         rss_modes: {},
         schedules: [],
       });
       const newMode = reactive({ mode: '', rss_url: '', download_dir: '/downloads', enabled: 1 });
-      const newSchedule = reactive({ schedule_name: '', mode: '', run_time: '03:30', keywords_text: '', enabled: 1 });
+      const newSchedule = reactive({ schedule_name: '', mode: '', downloader_id: '', run_time: '03:30', keywords_text: '', enabled: 1 });
+      const newDownloader = reactive({
+        name: '',
+        backend_type: 'transmission',
+        host: '',
+        username: '',
+        password: '',
+      });
 
       const enabledModes = computed(()=>{
         return Object.entries(config.rss_modes || {})
@@ -514,11 +860,34 @@
       const rssModeCards = computed(()=>{
         return Object.entries(config.rss_modes || {}).map(([mode, data]) => ({ mode, data }));
       });
+      const activeDownloader = computed(()=>{
+        const currentId = String(config.active_downloader_id || '').trim();
+        const found = (config.downloaders || []).find(item => String(item.id || '') === currentId);
+        return found || null;
+      });
+      const downloaderOptions = computed(()=>{
+        return (config.downloaders || []).map((item)=>({
+          id: String(item.id || ''),
+          label: `${item.name || item.id || '未命名'} (${normalizeDownloaderType(item.backend_type) === 'qbittorrent' ? 'qBittorrent' : 'Transmission'})`
+        }));
+      });
       const transmissionStatusLabel = computed(()=>{
         if(transmissionConnected.value === true) return '在线';
         if(transmissionConnected.value === false) return '离线';
         return '未知';
       });
+      const downloaderType = computed(() => normalizeDownloaderType(activeDownloader.value?.backend_type || config.transmission?.backend_type));
+      const downloaderLabel = computed(() => downloaderType.value === 'qbittorrent' ? 'qBittorrent' : 'Transmission');
+      const downloaderHostPlaceholder = computed(() => (
+        downloaderType.value === 'qbittorrent'
+          ? 'http://127.0.0.1:8080'
+          : 'http://127.0.0.1:9091'
+      ));
+      const historyDescColumns = computed(() => (viewportWidth.value <= 768 ? 1 : 2));
+
+      function handleResize(){
+        viewportWidth.value = getViewportWidth();
+      }
 
       async function api(url, options={}){
         const resp = await fetch(url, options);
@@ -535,6 +904,93 @@
           .slice(0, 32);
       }
 
+      function normalizeDownloaderType(value){
+        const raw = String(value || '').trim().toLowerCase();
+        if(raw === 'qb' || raw === 'qbt' || raw === 'qbittorrent'){
+          return 'qbittorrent';
+        }
+        return 'transmission';
+      }
+
+      function normalizeDownloaderId(value, fallback = ''){
+        const raw = String(value || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 40);
+        if(raw) return raw;
+        const fb = String(fallback || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 40);
+        if(fb) return fb;
+        return `dl_${Date.now().toString().slice(-6)}`;
+      }
+
+      function normalizeDownloaderProfile(raw, fallbackId = '', fallbackName = ''){
+        const item = raw || {};
+        const id = normalizeDownloaderId(item.id, fallbackId || 'default');
+        const name = String(item.name || fallbackName || id).trim() || id;
+        const requestTimeout = Math.max(1, Number(item.request_timeout ?? 30) || 30);
+        const maxRetries = Math.max(1, Number(item.max_retries ?? 3) || 3);
+        const retryDelay = Math.max(0, Number(item.retry_delay ?? 2) || 2);
+        return {
+          id,
+          name: name.slice(0, 40),
+          backend_type: normalizeDownloaderType(item.backend_type),
+          host: String(item.host || '').trim(),
+          username: String(item.username || '').trim(),
+          password: String(item.password || ''),
+          request_timeout: requestTimeout,
+          max_retries: maxRetries,
+          retry_delay: retryDelay,
+        };
+      }
+
+      function ensureActiveDownloader(){
+        if(!Array.isArray(config.downloaders)){
+          config.downloaders = [];
+        }
+        if(!config.downloaders.length){
+          const fallback = normalizeDownloaderProfile({
+            id: 'default',
+            name: '默认下载器',
+            backend_type: 'transmission',
+            host: '',
+            username: '',
+            password: '',
+            request_timeout: 30,
+            max_retries: 3,
+            retry_delay: 2,
+          }, 'default', '默认下载器');
+          config.downloaders = [fallback];
+          config.active_downloader_id = fallback.id;
+        }
+
+        const ids = new Set(config.downloaders.map(item => String(item.id || '')));
+        if(!ids.has(String(config.active_downloader_id || ''))){
+          config.active_downloader_id = config.downloaders[0].id;
+        }
+
+        const active = activeDownloader.value || config.downloaders[0];
+        config.transmission = {
+          id: active.id,
+          name: active.name,
+          backend_type: active.backend_type,
+          host: active.host,
+          username: active.username,
+          password: active.password,
+          request_timeout: Number(active.request_timeout || 30),
+          max_retries: Number(active.max_retries || 3),
+          retry_delay: Number(active.retry_delay || 2),
+        };
+      }
+
       function parseKeywordsText(text){
         return String(text || '')
           .trim()
@@ -547,15 +1003,40 @@
         return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(text || '').trim());
       }
 
+      function applyPreviewPagination(){
+        const pageSize = Math.max(1, Number(previewPager.page_size || PREVIEW_PAGE_SIZE));
+        const total = previewAllItems.value.length;
+        const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
+        const page = Math.min(Math.max(1, Number(previewPager.page || 1)), totalPages);
+        previewPager.page = page;
+        const start = (page - 1) * pageSize;
+        previewItems.value = previewAllItems.value.slice(start, start + pageSize);
+      }
+
+      function onPreviewPageChange(page){
+        previewPager.page = Math.max(1, Number(page || 1));
+        applyPreviewPagination();
+      }
+
+      async function onHistoryPageChange(page){
+        await loadHistory(page);
+      }
+
       function normalizeHistoryRecord(raw){
         const item = raw || {};
         const triggerRaw = String(item.trigger || '').trim().toLowerCase();
         const fromTaskId = String(item.task_id || '').startsWith('auto_');
         const trigger = triggerRaw === 'schedule' || fromTaskId ? 'schedule' : 'manual';
+        const rawDownloaderType = String(item.downloader_type || '').trim();
+        const downloaderType = rawDownloaderType ? normalizeDownloaderType(rawDownloaderType) : '';
         return {
           ...item,
           trigger,
           schedule_name: String(item.schedule_name || ''),
+          downloader_id: String(item.downloader_id || ''),
+          downloader_name: String(item.downloader_name || ''),
+          downloader_type: downloaderType,
+          downloader_type_label: downloaderType ? (downloaderType === 'qbittorrent' ? 'qBittorrent' : 'Transmission') : '',
           added_torrents: Array.isArray(item.added_torrents) ? item.added_torrents : [],
           skipped_torrents: Array.isArray(item.skipped_torrents) ? item.skipped_torrents : [],
           failed_torrents: Array.isArray(item.failed_torrents) ? item.failed_torrents : [],
@@ -569,22 +1050,64 @@
         }
       }
 
+      function syncTaskDownloader(){
+        const downloaderIds = new Set((config.downloaders || []).map(item => String(item.id || '')));
+        if(!downloaderIds.has(String(taskForm.downloader_id || ''))){
+          taskForm.downloader_id = String(config.active_downloader_id || '');
+        }
+      }
+
       function syncScheduleModes(){
         const modeSet = new Set(Object.keys(config.rss_modes || {}));
         config.schedules = (config.schedules || []).filter(item => modeSet.has(String(item.mode || '')));
       }
 
+      function syncScheduleDownloaders(){
+        const downloaderIds = new Set((config.downloaders || []).map(item => String(item.id || '')));
+        const fallbackId = String(config.active_downloader_id || '');
+        config.schedules = (config.schedules || []).map((item)=>{
+          const currentId = String(item.downloader_id || '').trim();
+          if(downloaderIds.has(currentId)){
+            return item;
+          }
+          return { ...item, downloader_id: fallbackId };
+        });
+      }
+
       function normalizeConfig(input){
         const c = input || {};
         config.tenant_name = c.tenant_name || '';
-        config.transmission = {
-          host: c.transmission?.host || '',
-          username: c.transmission?.username || '',
-          password: c.transmission?.password || '',
-          request_timeout: Number(c.transmission?.request_timeout ?? 30),
-          max_retries: Number(c.transmission?.max_retries ?? 3),
-          retry_delay: Number(c.transmission?.retry_delay ?? 2),
-        };
+        const loadedDownloaders = [];
+        const seenDownloaderIds = new Set();
+        (Array.isArray(c.downloaders) ? c.downloaders : []).forEach((raw, idx)=>{
+          const normalized = normalizeDownloaderProfile(raw, `dl_${idx + 1}`, `下载器${idx + 1}`);
+          if(seenDownloaderIds.has(normalized.id)) return;
+          seenDownloaderIds.add(normalized.id);
+          loadedDownloaders.push(normalized);
+        });
+        if(!loadedDownloaders.length){
+          loadedDownloaders.push(
+            normalizeDownloaderProfile(
+              {
+                id: 'default',
+                name: '默认下载器',
+                backend_type: c.transmission?.backend_type,
+                host: c.transmission?.host || '',
+                username: c.transmission?.username || '',
+                password: c.transmission?.password || '',
+                request_timeout: c.transmission?.request_timeout ?? 30,
+                max_retries: c.transmission?.max_retries ?? 3,
+                retry_delay: c.transmission?.retry_delay ?? 2,
+              },
+              'default',
+              '默认下载器'
+            )
+          );
+        }
+        config.downloaders = loadedDownloaders;
+        config.active_downloader_id = normalizeDownloaderId(c.active_downloader_id, loadedDownloaders[0].id);
+        ensureActiveDownloader();
+
         config.rss_modes = {};
         Object.entries(c.rss_modes || {}).forEach(([mode, modeData])=>{
           const mk = normalizeModeKey(mode);
@@ -601,12 +1124,15 @@
           id: Number(raw?.id || 0),
           schedule_name: String(raw?.schedule_name || raw?.mode || ''),
           mode: String(raw?.mode || ''),
+          downloader_id: String(raw?.downloader_id || config.active_downloader_id || ''),
           run_time: String(raw?.run_time || '03:30'),
           keywords_text: Array.isArray(raw?.keywords) ? raw.keywords.join(' ') : String(raw?.keywords || ''),
           enabled: Number(raw?.enabled) === 1 ? 1 : 0,
         }));
         syncScheduleModes();
+        syncScheduleDownloaders();
         syncTaskMode();
+        syncTaskDownloader();
       }
 
       function openAddModeDialog(){
@@ -645,6 +1171,116 @@
         ElementPlus.ElMessage.success(`已新增类型：${finalKey}`);
       }
 
+      function openAddDownloaderDialog(){
+        newDownloader.name = '';
+        newDownloader.backend_type = 'transmission';
+        newDownloader.host = '';
+        newDownloader.username = '';
+        newDownloader.password = '';
+        addDownloaderVisible.value = true;
+      }
+
+      function confirmAddDownloader(){
+        const name = String(newDownloader.name || '').trim() || `下载器${(config.downloaders || []).length + 1}`;
+        let baseId = normalizeDownloaderId(name, `dl_${(config.downloaders || []).length + 1}`);
+        let finalId = baseId;
+        let idx = 2;
+        const usedIds = new Set((config.downloaders || []).map(item => String(item.id || '')));
+        while(usedIds.has(finalId)){
+          finalId = normalizeDownloaderId(`${baseId}_${idx}`, `dl_${idx}`);
+          idx += 1;
+        }
+        const profile = normalizeDownloaderProfile(
+          {
+            id: finalId,
+            name,
+            backend_type: newDownloader.backend_type,
+            host: newDownloader.host,
+            username: newDownloader.username,
+            password: newDownloader.password,
+            request_timeout: 30,
+            max_retries: 3,
+            retry_delay: 2,
+          },
+          finalId,
+          name
+        );
+        config.downloaders.push(profile);
+        config.active_downloader_id = profile.id;
+        ensureActiveDownloader();
+        syncTaskDownloader();
+        addDownloaderVisible.value = false;
+        ElementPlus.ElMessage.success(`已新增下载器：${profile.name}`);
+      }
+
+      function setActiveDownloader(downloaderId){
+        const normalizedId = String(downloaderId || '').trim();
+        if(!normalizedId) return;
+        config.active_downloader_id = normalizedId;
+        ensureActiveDownloader();
+        syncTaskDownloader();
+        syncScheduleDownloaders();
+      }
+
+      async function removeDownloaderConfirm(targetDownloaderId = ''){
+        if((config.downloaders || []).length <= 1){
+          ElementPlus.ElMessage.warning('至少保留一个下载器');
+          return;
+        }
+        const normalizedId = String(targetDownloaderId || config.active_downloader_id || '').trim();
+        const current = (config.downloaders || []).find(item => String(item.id || '') === normalizedId) || activeDownloader.value;
+        if(!current){
+          ElementPlus.ElMessage.warning('当前下载器不存在');
+          return;
+        }
+        try{
+          await ElementPlus.ElMessageBox.confirm(
+            `确认删除下载器「${current.name || current.id}」吗？`,
+            '删除确认',
+            { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+          );
+        }catch(_e){
+          return;
+        }
+        const currentId = String(current.id || '');
+        config.downloaders = (config.downloaders || []).filter(item => String(item.id || '') !== currentId);
+        ensureActiveDownloader();
+        syncTaskDownloader();
+        syncScheduleDownloaders();
+        ElementPlus.ElMessage.success('下载器已删除');
+      }
+
+      async function testDownloader(row){
+        const item = normalizeDownloaderProfile(row || {}, 'default', '默认下载器');
+        if(!item.host){
+          ElementPlus.ElMessage.warning('Host 不能为空');
+          return;
+        }
+        testingTransmission.value = true;
+        const d = await api('/api/user/transmission/test', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ transmission: { ...item } })
+        });
+        testingTransmission.value = false;
+        transmissionHost.value = item.host || transmissionHost.value;
+        if(!d.success){
+          transmissionConnected.value = false;
+          transmissionStatusMessage.value = d.message || '测试失败';
+          ElementPlus.ElMessage.error(d.message || `${item.name} 测试失败`);
+          return;
+        }
+        row.backend_type = normalizeDownloaderType(d.downloader_type || item.backend_type);
+        transmissionConnected.value = typeof d.transmission_connected === 'boolean' ? d.transmission_connected : null;
+        transmissionHost.value = d.transmission_host || transmissionHost.value;
+        transmissionStatusMessage.value = d.message || (transmissionConnected.value ? '连接成功' : '连接失败');
+        if(transmissionConnected.value){
+          ElementPlus.ElMessage.success(`${item.name}：${transmissionStatusMessage.value}`);
+        }else{
+          ElementPlus.ElMessage.warning(`${item.name}：${transmissionStatusMessage.value}`);
+        }
+      }
+
       function removeMode(mode){
         delete config.rss_modes[mode];
         const beforeCount = (config.schedules || []).length;
@@ -661,8 +1297,13 @@
           ElementPlus.ElMessage.warning('请先配置至少一个 RSS 类型');
           return;
         }
+        if(!downloaderOptions.value.length){
+          ElementPlus.ElMessage.warning('请先配置至少一个下载器');
+          return;
+        }
         newSchedule.schedule_name = '';
         newSchedule.mode = allModes.value[0].mode;
+        newSchedule.downloader_id = String(config.active_downloader_id || downloaderOptions.value[0].id || '');
         newSchedule.run_time = '03:30';
         newSchedule.keywords_text = '';
         newSchedule.enabled = 1;
@@ -671,8 +1312,13 @@
 
       function confirmAddSchedule(){
         const mode = String(newSchedule.mode || '').trim();
+        const downloaderId = String(newSchedule.downloader_id || '').trim();
         if(!mode){
           ElementPlus.ElMessage.warning('请选择 RSS 类型');
+          return;
+        }
+        if(!downloaderId){
+          ElementPlus.ElMessage.warning('请选择下载器');
           return;
         }
         if(!isValidRunTime(newSchedule.run_time)){
@@ -684,6 +1330,7 @@
           id: 0,
           schedule_name: scheduleName,
           mode,
+          downloader_id: downloaderId,
           run_time: String(newSchedule.run_time || '').trim(),
           keywords_text: String(newSchedule.keywords_text || '').trim(),
           enabled: Number(newSchedule.enabled) === 1 ? 1 : 0,
@@ -735,19 +1382,46 @@
         const d = await api('/api/user/status');
         if(!d.success){
           transmissionConnected.value = null;
-          transmissionHost.value = config.transmission.host || '';
+          transmissionHost.value = activeDownloader.value?.host || config.transmission.host || '';
           transmissionStatusMessage.value = d.message || '状态获取失败';
           return;
         }
+        if(Array.isArray(d.downloaders) && d.downloaders.length){
+          const loadedDownloaders = [];
+          const seen = new Set();
+          d.downloaders.forEach((item, idx)=>{
+            const normalized = normalizeDownloaderProfile(item, `dl_${idx + 1}`, `下载器${idx + 1}`);
+            if(seen.has(normalized.id)) return;
+            seen.add(normalized.id);
+            loadedDownloaders.push(normalized);
+          });
+          if(loadedDownloaders.length){
+            config.downloaders = loadedDownloaders;
+          }
+        }
+        if(d.active_downloader_id){
+          config.active_downloader_id = normalizeDownloaderId(d.active_downloader_id, config.active_downloader_id);
+        }
+        ensureActiveDownloader();
+        syncScheduleDownloaders();
+        syncTaskDownloader();
         transmissionConnected.value = typeof d.transmission_connected === 'boolean' ? d.transmission_connected : null;
-        transmissionHost.value = d.transmission_host || config.transmission.host || '';
-        transmissionStatusMessage.value = transmissionConnected.value === true ? '连接正常' : '连接异常';
+        transmissionHost.value = d.transmission_host || activeDownloader.value?.host || '';
+        transmissionStatusMessage.value = transmissionConnected.value === true
+          ? `${downloaderLabel.value} 连接正常`
+          : `${downloaderLabel.value} 连接异常`;
       }
 
       async function saveConfig(){
+        ensureActiveDownloader();
+        syncScheduleDownloaders();
         for(const row of (config.schedules || [])){
           if(!String(row.mode || '').trim()){
             ElementPlus.ElMessage.warning('自动下载计划存在空模式，请检查');
+            return;
+          }
+          if(!String(row.downloader_id || '').trim()){
+            ElementPlus.ElMessage.warning(`计划「${row.schedule_name || row.mode}」未选择下载器`);
             return;
           }
           if(!isValidRunTime(row.run_time)){
@@ -759,15 +1433,30 @@
         const schedulesPayload = (config.schedules || []).map((row)=>({
           schedule_name: String(row.schedule_name || row.mode || '').trim() || String(row.mode || ''),
           mode: String(row.mode || '').trim(),
+          downloader_id: String(row.downloader_id || '').trim(),
           run_time: String(row.run_time || '').trim(),
           keywords: parseKeywordsText(row.keywords_text),
           enabled: Number(row.enabled) === 1 ? 1 : 0,
         }));
 
+        const downloadersPayload = (config.downloaders || []).map((item, idx)=>normalizeDownloaderProfile(
+          item,
+          `dl_${idx + 1}`,
+          `下载器${idx + 1}`
+        ));
+        if(!downloadersPayload.length){
+          ElementPlus.ElMessage.warning('请至少保留一个下载器');
+          return;
+        }
+        const activeId = normalizeDownloaderId(config.active_downloader_id, downloadersPayload[0].id);
+        const active = downloadersPayload.find(item => item.id === activeId) || downloadersPayload[0];
+
         saving.value = true;
         const payload = {
           tenant_name: config.tenant_name,
-          transmission: { ...config.transmission },
+          transmission: { ...active },
+          downloaders: downloadersPayload,
+          active_downloader_id: active.id,
           rss_modes: config.rss_modes,
           rss_modes_replace: true,
           schedules: schedulesPayload,
@@ -829,74 +1518,64 @@
       }
 
       async function testTransmission(){
-        testingTransmission.value = true;
-        const d = await api('/api/user/transmission/test', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ transmission: { ...config.transmission } })
-        });
-        testingTransmission.value = false;
-        transmissionHost.value = config.transmission.host || transmissionHost.value;
-        if(!d.success){
-          transmissionConnected.value = false;
-          transmissionStatusMessage.value = d.message || '测试失败';
-          ElementPlus.ElMessage.error(d.message || 'Transmission 测试失败');
+        ensureActiveDownloader();
+        const current = activeDownloader.value;
+        if(!current){
+          ElementPlus.ElMessage.warning('请先新增下载器');
           return;
         }
-        transmissionConnected.value = typeof d.transmission_connected === 'boolean' ? d.transmission_connected : null;
-        transmissionHost.value = d.transmission_host || transmissionHost.value;
-        transmissionStatusMessage.value = d.message || (transmissionConnected.value ? '连接成功' : '连接失败');
-        if(transmissionConnected.value){
-          ElementPlus.ElMessage.success(transmissionStatusMessage.value);
-        }else{
-          ElementPlus.ElMessage.warning(transmissionStatusMessage.value);
-        }
+        await testDownloader(current);
       }
 
       async function preview(){
         if(!taskForm.mode){ ElementPlus.ElMessage.warning('没有可用模式'); return; }
+        if(!taskForm.downloader_id){ ElementPlus.ElMessage.warning('请选择下载器'); return; }
         previewLoading.value = true;
         const d = await api('/api/user/preview', {
-          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode: taskForm.mode })
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ mode: taskForm.mode, downloader_id: taskForm.downloader_id })
         });
         previewLoading.value = false;
         if(!d.success){ ElementPlus.ElMessage.error(d.message || '预览失败'); return; }
         previewModeName.value = d.mode_name || taskForm.mode;
-        previewTotal.value = Number(d.count || 0);
-        previewItems.value = (d.items || []).map(it => ({
+        previewAllItems.value = (d.items || []).map(it => ({
           ...it,
           title: it.title || '',
           chinese_name: it.chinese_name || ''
         }));
-        if(previewTotal.value === 0){
-          previewTotal.value = previewItems.value.length;
-        }
+        previewTotal.value = Number(d.count || previewAllItems.value.length || 0);
+        previewPager.page = 1;
+        applyPreviewPagination();
       }
 
       async function downloadOne(row){
         if(!taskForm.mode){ ElementPlus.ElMessage.warning('请先选择模式'); return; }
+        if(!taskForm.downloader_id){ ElementPlus.ElMessage.warning('请选择下载器'); return; }
         if(!row || !row.enclosure_url){ ElementPlus.ElMessage.warning('该条目没有可下载链接'); return; }
         const d = await api('/api/user/download-one', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             mode: taskForm.mode,
+            downloader_id: taskForm.downloader_id,
             url: row.enclosure_url,
             title: row.chinese_name || row.title || ''
           })
         });
         if(!d.success){ ElementPlus.ElMessage.error(d.message || '下载失败'); return; }
         ElementPlus.ElMessage.success(d.message || '已提交下载');
-        await loadHistory();
+        await loadHistory(1);
       }
 
       async function startDownload(){
         if(!taskForm.mode){ ElementPlus.ElMessage.warning('没有可用模式'); return; }
+        if(!taskForm.downloader_id){ ElementPlus.ElMessage.warning('请选择下载器'); return; }
         downloadStarting.value = true;
         const d = await api('/api/user/download', {
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ mode: taskForm.mode, keywords: taskForm.keywords || '' })
+          body: JSON.stringify({ mode: taskForm.mode, downloader_id: taskForm.downloader_id, keywords: taskForm.keywords || '' })
         });
         downloadStarting.value = false;
         if(!d.success){ ElementPlus.ElMessage.error(d.message || '启动失败'); return; }
@@ -913,16 +1592,29 @@
           progressText.value = p.message || p.status || '处理中';
           if(p.status === 'completed' || p.status === 'error'){
             taskId.value = '';
-            await loadHistory();
+            await loadHistory(1);
             return;
           }
         }
         setTimeout(pollProgress, 1000);
       }
 
-      async function loadHistory(){
-        const d = await api('/api/user/history?limit=30');
+      async function loadHistory(page = 1){
+        const targetPage = Math.max(1, Number(page || 1));
+        const d = await api(`/api/user/history?page=${targetPage}&page_size=${historyPager.page_size}`);
+        if(!d.success){
+          history.value = [];
+          historyPager.total = 0;
+          historyPager.page = targetPage;
+          return;
+        }
         history.value = (d.history || []).map(normalizeHistoryRecord);
+        historyPager.total = Math.max(0, Number(d.total || 0));
+        historyPager.page = Math.max(1, Number(d.page || targetPage));
+        const totalPages = historyPager.total > 0 ? Math.ceil(historyPager.total / historyPager.page_size) : 1;
+        if(historyPager.total > 0 && historyPager.page > totalPages){
+          await loadHistory(totalPages);
+        }
       }
 
       function openHistoryDetail(row){
@@ -933,8 +1625,9 @@
 
       async function refreshAll(){
         await loadConfig();
-        await loadStatus();
-        await loadHistory();
+        await loadHistory(1);
+        // Do not block history rendering by Transmission status timeout.
+        loadStatus();
       }
 
       async function logout(){
@@ -943,10 +1636,18 @@
       }
 
       onMounted(async ()=>{
+        if(typeof window !== 'undefined'){
+          window.addEventListener('resize', handleResize, { passive: true });
+        }
         const hash = (location.hash || '').replace('#', '');
         activeMenu.value = hash === 'config' ? 'config' : 'main';
         if(await ensureLogin()){
           await refreshAll();
+        }
+      });
+      onBeforeUnmount(()=>{
+        if(typeof window !== 'undefined'){
+          window.removeEventListener('resize', handleResize);
         }
       });
 
@@ -956,16 +1657,24 @@
         progressText,
         previewModeName,
         previewTotal,
+        previewPager,
         previewItems,
+        historyPager,
         history,
         taskForm,
         passwordForm,
         config,
         newMode,
+        newDownloader,
         enabledModes,
         allModes,
         rssModeCards,
+        activeDownloader,
+        downloaderOptions,
         transmissionStatusLabel,
+        downloaderLabel,
+        downloaderHostPlaceholder,
+        historyDescColumns,
         transmissionConnected,
         transmissionHost,
         transmissionStatusMessage,
@@ -976,13 +1685,19 @@
         changingPassword,
         addModeVisible,
         addScheduleVisible,
+        addDownloaderVisible,
         passwordDialogVisible,
         historyDetailVisible,
         historyDetailTab,
         historyDetail,
         refreshAll,
         logout,
+        ensureActiveDownloader,
+        syncTaskDownloader,
+        syncScheduleDownloaders,
         preview,
+        onPreviewPageChange,
+        onHistoryPageChange,
         startDownload,
         saveConfig,
         resetPasswordForm,
@@ -990,6 +1705,11 @@
         changePassword,
         openAddModeDialog,
         confirmAddMode,
+        openAddDownloaderDialog,
+        confirmAddDownloader,
+        setActiveDownloader,
+        testDownloader,
+        removeDownloaderConfirm,
         openAddScheduleDialog,
         confirmAddSchedule,
         removeScheduleConfirm,

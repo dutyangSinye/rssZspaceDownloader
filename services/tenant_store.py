@@ -6,12 +6,13 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
 DEFAULT_TRANSMISSION = {
+    "backend_type": "transmission",
     "host": "http://localhost:9091",
     "username": "",
     "password": "",
@@ -158,6 +159,7 @@ class TenantStore:
                     tenant_id INTEGER NOT NULL,
                     schedule_name TEXT NOT NULL,
                     mode TEXT NOT NULL,
+                    downloader_id TEXT NOT NULL DEFAULT '',
                     keywords_json TEXT NOT NULL DEFAULT '[]',
                     run_time TEXT NOT NULL DEFAULT '03:00',
                     timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
@@ -183,6 +185,7 @@ class TenantStore:
                 f"TEXT NOT NULL DEFAULT '{DEFAULT_SCHEDULE_TZ}'",
             )
             self._ensure_column(conn, "tenant_download_schedules", "last_run_date", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "tenant_download_schedules", "downloader_id", "TEXT NOT NULL DEFAULT ''")
             conn.execute("UPDATE tenant_users SET user_role = 'user' WHERE user_role <> 'user'")
 
     def _get_tenant_row(self, conn: sqlite3.Connection, tenant_key: str) -> Optional[sqlite3.Row]:
@@ -255,10 +258,114 @@ class TenantStore:
             return []
         return [v for v in re.split(r"[\s,，]+", text) if v]
 
+    @staticmethod
+    def _normalize_downloader_type(value: Any) -> str:
+        raw = str(value or "").strip().lower()
+        if raw in {"qb", "qbt", "qbittorrent"}:
+            return "qbittorrent"
+        if raw in {"", "tr", "transmission"}:
+            return "transmission"
+        raise ValueError(f"下载器类型无效: {value}")
+
+    @staticmethod
+    def _normalize_positive_int(value: Any, default_value: int, min_value: int = 0) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = int(default_value)
+        if parsed < int(min_value):
+            parsed = int(min_value)
+        return parsed
+
+    @staticmethod
+    def _normalize_downloader_id(value: Any, fallback: str = "") -> str:
+        raw = re.sub(r"[^a-z0-9_-]+", "_", str(value or "").strip().lower())
+        raw = re.sub(r"_+", "_", raw).strip("_")
+        if raw:
+            return raw[:40]
+        fallback_raw = re.sub(r"[^a-z0-9_-]+", "_", str(fallback or "").strip().lower())
+        fallback_raw = re.sub(r"_+", "_", fallback_raw).strip("_")
+        if fallback_raw:
+            return fallback_raw[:40]
+        return f"dl_{secrets.token_hex(3)}"
+
+    def _normalize_downloader_profile(self, raw: Any, fallback_id: str = "", fallback_name: str = "") -> Dict[str, Any]:
+        item = raw if isinstance(raw, dict) else {}
+        normalized_id = self._normalize_downloader_id(item.get("id"), fallback_id)
+        normalized_name = str(item.get("name") or fallback_name or normalized_id).strip()[:40] or normalized_id
+        return {
+            "id": normalized_id,
+            "name": normalized_name,
+            "backend_type": self._normalize_downloader_type(item.get("backend_type")),
+            "host": str(item.get("host") or "").strip(),
+            "username": str(item.get("username") or "").strip(),
+            "password": str(item.get("password") or ""),
+            "request_timeout": self._normalize_positive_int(item.get("request_timeout"), DEFAULT_TRANSMISSION["request_timeout"], 1),
+            "max_retries": self._normalize_positive_int(item.get("max_retries"), DEFAULT_TRANSMISSION["max_retries"], 1),
+            "retry_delay": self._normalize_positive_int(item.get("retry_delay"), DEFAULT_TRANSMISSION["retry_delay"], 0),
+        }
+
+    def _load_legacy_transmission(self, raw_config: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            backend_type = self._normalize_downloader_type(raw_config.get("backend_type", DEFAULT_TRANSMISSION["backend_type"]))
+        except Exception:
+            backend_type = "transmission"
+        return {
+            "backend_type": backend_type,
+            "host": str(raw_config.get("host", DEFAULT_TRANSMISSION["host"])),
+            "username": str(raw_config.get("username", DEFAULT_TRANSMISSION["username"])),
+            "password": str(raw_config.get("password", DEFAULT_TRANSMISSION["password"])),
+            "request_timeout": self._normalize_positive_int(raw_config.get("request_timeout"), DEFAULT_TRANSMISSION["request_timeout"], 1),
+            "max_retries": self._normalize_positive_int(raw_config.get("max_retries"), DEFAULT_TRANSMISSION["max_retries"], 1),
+            "retry_delay": self._normalize_positive_int(raw_config.get("retry_delay"), DEFAULT_TRANSMISSION["retry_delay"], 0),
+        }
+
+    def _load_downloader_profiles(self, raw_config: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], str]:
+        legacy = self._load_legacy_transmission(raw_config)
+
+        profiles: List[Dict[str, Any]] = []
+        seen_ids = set()
+        raw_json = str(raw_config.get("downloaders_json") or "").strip()
+        if raw_json:
+            try:
+                parsed = json.loads(raw_json)
+            except Exception:
+                parsed = []
+            if isinstance(parsed, list):
+                for idx, item in enumerate(parsed, start=1):
+                    if not isinstance(item, dict):
+                        continue
+                    try:
+                        profile = self._normalize_downloader_profile(item, fallback_id=f"dl_{idx}", fallback_name=f"下载器{idx}")
+                    except Exception:
+                        continue
+                    if profile["id"] in seen_ids:
+                        continue
+                    seen_ids.add(profile["id"])
+                    profiles.append(profile)
+
+        if not profiles:
+            default_profile = self._normalize_downloader_profile(
+                {
+                    "id": "default",
+                    "name": "默认下载器",
+                    **legacy,
+                },
+                fallback_id="default",
+                fallback_name="默认下载器",
+            )
+            profiles = [default_profile]
+            seen_ids = {default_profile["id"]}
+
+        active_id = self._normalize_downloader_id(raw_config.get("active_downloader_id"), fallback=profiles[0]["id"])
+        if active_id not in seen_ids:
+            active_id = profiles[0]["id"]
+        return profiles, active_id
+
     def _list_schedules_by_tenant_id(self, conn: sqlite3.Connection, tenant_id: int) -> List[Dict[str, Any]]:
         rows = conn.execute(
             """
-            SELECT id, schedule_name, mode, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
+            SELECT id, schedule_name, mode, downloader_id, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
             FROM tenant_download_schedules
             WHERE tenant_id = ?
             ORDER BY id DESC
@@ -279,6 +386,7 @@ class TenantStore:
                     "id": int(row["id"]),
                     "schedule_name": str(row["schedule_name"]),
                     "mode": str(row["mode"]),
+                    "downloader_id": str(row["downloader_id"] or ""),
                     "keywords": keywords,
                     "run_time": str(row["run_time"]),
                     "timezone": str(row["timezone"] or DEFAULT_SCHEDULE_TZ),
@@ -310,6 +418,13 @@ class TenantStore:
                 return
             for key, value in transmission_seed.items():
                 self._upsert_config(conn, tenant_id, key, str(value))
+            default_profile = self._normalize_downloader_profile(
+                {"id": "default", "name": "默认下载器", **transmission_seed},
+                fallback_id="default",
+                fallback_name="默认下载器",
+            )
+            self._upsert_config(conn, tenant_id, "downloaders_json", json.dumps([default_profile], ensure_ascii=False))
+            self._upsert_config(conn, tenant_id, "active_downloader_id", default_profile["id"])
 
             for mode, mode_data in rss_seed.items():
                 self._upsert_mode(conn, tenant_id, mode, mode_data)
@@ -668,6 +783,7 @@ class TenantStore:
             if template is None:
                 # Create a clean tenant profile when not copying from another tenant.
                 transmission = {
+                    "backend_type": "transmission",
                     "host": "",
                     "username": "",
                     "password": "",
@@ -675,20 +791,62 @@ class TenantStore:
                     "max_retries": DEFAULT_TRANSMISSION["max_retries"],
                     "retry_delay": DEFAULT_TRANSMISSION["retry_delay"],
                 }
+                downloaders = [
+                    self._normalize_downloader_profile(
+                        {
+                            "id": "default",
+                            "name": "默认下载器",
+                            **transmission,
+                        },
+                        fallback_id="default",
+                        fallback_name="默认下载器",
+                    )
+                ]
+                active_downloader_id = downloaders[0]["id"]
                 rss_modes = {}
                 schedules: List[Dict[str, Any]] = []
             else:
                 transmission = (template or {}).get("transmission", DEFAULT_TRANSMISSION)
+                template_downloaders = (template or {}).get("downloaders") or []
+                downloaders = []
+                seen_ids = set()
+                for idx, item in enumerate(template_downloaders, start=1):
+                    if not isinstance(item, dict):
+                        continue
+                    profile = self._normalize_downloader_profile(item, fallback_id=f"dl_{idx}", fallback_name=f"下载器{idx}")
+                    if profile["id"] in seen_ids:
+                        continue
+                    seen_ids.add(profile["id"])
+                    downloaders.append(profile)
+                if not downloaders:
+                    downloaders = [
+                        self._normalize_downloader_profile(
+                            {"id": "default", "name": "默认下载器", **(transmission or {})},
+                            fallback_id="default",
+                            fallback_name="默认下载器",
+                        )
+                    ]
+                active_downloader_id = self._normalize_downloader_id((template or {}).get("active_downloader_id"), fallback=downloaders[0]["id"])
+                if active_downloader_id not in {d["id"] for d in downloaders}:
+                    active_downloader_id = downloaders[0]["id"]
                 rss_modes = (template or {}).get("rss_modes", DEFAULT_RSS_MODES)
                 schedules = (template or {}).get("schedules", [])
             for key, value in transmission.items():
                 self._upsert_config(conn, new_tenant_id, key, str(value))
+            self._upsert_config(conn, new_tenant_id, "downloaders_json", json.dumps(downloaders, ensure_ascii=False))
+            self._upsert_config(conn, new_tenant_id, "active_downloader_id", active_downloader_id)
             for mode, mode_data in rss_modes.items():
                 self._upsert_mode(conn, new_tenant_id, mode, mode_data)
             for schedule in schedules:
                 mode_key = str((schedule or {}).get("mode") or "").strip().lower()
                 if not mode_key:
                     continue
+                schedule_downloader_id = self._normalize_downloader_id(
+                    (schedule or {}).get("downloader_id"),
+                    fallback=active_downloader_id,
+                )
+                if schedule_downloader_id not in {d["id"] for d in downloaders}:
+                    schedule_downloader_id = active_downloader_id
                 run_time = str((schedule or {}).get("run_time") or "03:00").strip()
                 if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", run_time):
                     run_time = "03:00"
@@ -698,13 +856,14 @@ class TenantStore:
                 conn.execute(
                     """
                     INSERT INTO tenant_download_schedules(
-                        tenant_id, schedule_name, mode, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+                        tenant_id, schedule_name, mode, downloader_id, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
                     """,
                     (
                         new_tenant_id,
                         schedule_name[:80],
                         mode_key,
+                        schedule_downloader_id,
                         json.dumps(keywords, ensure_ascii=False),
                         run_time,
                         DEFAULT_SCHEDULE_TZ,
@@ -738,13 +897,28 @@ class TenantStore:
 
             conf_rows = conn.execute("SELECT config_key, config_value FROM tenant_configs WHERE tenant_id = ?", (tenant_id,)).fetchall()
             raw_config = {r["config_key"]: r["config_value"] for r in conf_rows}
+            downloaders, active_downloader_id = self._load_downloader_profiles(raw_config)
+            active_downloader = next((d for d in downloaders if d.get("id") == active_downloader_id), downloaders[0])
             transmission = {
-                "host": raw_config.get("host", DEFAULT_TRANSMISSION["host"]),
-                "username": raw_config.get("username", DEFAULT_TRANSMISSION["username"]),
-                "password": raw_config.get("password", DEFAULT_TRANSMISSION["password"]),
-                "request_timeout": int(raw_config.get("request_timeout", DEFAULT_TRANSMISSION["request_timeout"])),
-                "max_retries": int(raw_config.get("max_retries", DEFAULT_TRANSMISSION["max_retries"])),
-                "retry_delay": int(raw_config.get("retry_delay", DEFAULT_TRANSMISSION["retry_delay"])),
+                "backend_type": str(active_downloader.get("backend_type") or DEFAULT_TRANSMISSION["backend_type"]),
+                "host": str(active_downloader.get("host") or DEFAULT_TRANSMISSION["host"]),
+                "username": str(active_downloader.get("username") or DEFAULT_TRANSMISSION["username"]),
+                "password": str(active_downloader.get("password") or DEFAULT_TRANSMISSION["password"]),
+                "request_timeout": self._normalize_positive_int(
+                    active_downloader.get("request_timeout"),
+                    DEFAULT_TRANSMISSION["request_timeout"],
+                    1,
+                ),
+                "max_retries": self._normalize_positive_int(
+                    active_downloader.get("max_retries"),
+                    DEFAULT_TRANSMISSION["max_retries"],
+                    1,
+                ),
+                "retry_delay": self._normalize_positive_int(
+                    active_downloader.get("retry_delay"),
+                    DEFAULT_TRANSMISSION["retry_delay"],
+                    0,
+                ),
             }
 
             mode_rows = conn.execute(
@@ -775,6 +949,8 @@ class TenantStore:
                 "auth_required": active_key_count > 0,
                 "active_api_key_count": active_key_count,
                 "transmission": transmission,
+                "downloaders": downloaders,
+                "active_downloader_id": active_downloader_id,
                 "rss_modes": rss_modes,
                 "schedules": schedules,
             }
@@ -796,46 +972,101 @@ class TenantStore:
                     (payload["tenant_status"], self._now(), tenant_id),
                 )
 
+            raw_rows = conn.execute(
+                "SELECT config_key, config_value FROM tenant_configs WHERE tenant_id = ?",
+                (tenant_id,),
+            ).fetchall()
+            existing_raw_config = {str(r["config_key"]): r["config_value"] for r in raw_rows}
+            existing_downloaders, existing_active_downloader_id = self._load_downloader_profiles(existing_raw_config)
+
             transmission_payload = payload.get("transmission")
+            downloaders_payload = payload.get("downloaders")
+            active_downloader_id_payload = payload.get("active_downloader_id")
+
             transmission_touched = isinstance(transmission_payload, dict)
-            if transmission_touched:
-                raw_rows = conn.execute(
-                    "SELECT config_key, config_value FROM tenant_configs WHERE tenant_id = ?",
-                    (tenant_id,),
-                ).fetchall()
-                existing = {str(r["config_key"]): r["config_value"] for r in raw_rows}
-                numeric_keys = {"request_timeout", "max_retries", "retry_delay"}
+            downloaders_touched = isinstance(downloaders_payload, list)
+            active_downloader_touched = active_downloader_id_payload is not None
 
-                merged: Dict[str, Any] = {}
-                for key, default_value in DEFAULT_TRANSMISSION.items():
-                    base_value = existing.get(key, default_value)
-                    if key in numeric_keys:
-                        try:
-                            base_value = int(base_value)
-                        except (TypeError, ValueError):
-                            base_value = int(default_value)
-                    else:
-                        base_value = str(base_value)
-                    merged[key] = base_value
+            next_downloaders: List[Dict[str, Any]] = [dict(item) for item in existing_downloaders]
+            next_active_downloader_id = str(existing_active_downloader_id or "").strip() or (next_downloaders[0]["id"] if next_downloaders else "")
 
-                for key, incoming in transmission_payload.items():
-                    if key not in DEFAULT_TRANSMISSION:
+            if downloaders_touched:
+                normalized_downloaders: List[Dict[str, Any]] = []
+                seen_ids = set()
+                for idx, item in enumerate(downloaders_payload, start=1):
+                    if not isinstance(item, dict):
                         continue
-                    if key in numeric_keys:
-                        try:
-                            parsed = int(incoming)
-                        except (TypeError, ValueError):
-                            parsed = merged[key]
-                        if key in {"request_timeout", "max_retries"} and parsed < 1:
-                            parsed = 1
-                        if key == "retry_delay" and parsed < 0:
-                            parsed = 0
-                        merged[key] = parsed
-                    else:
-                        merged[key] = str(incoming or "")
+                    profile = self._normalize_downloader_profile(item, fallback_id=f"dl_{idx}", fallback_name=f"下载器{idx}")
+                    if profile["id"] in seen_ids:
+                        continue
+                    seen_ids.add(profile["id"])
+                    normalized_downloaders.append(profile)
+                if not normalized_downloaders:
+                    raise ValueError("至少保留一个下载器")
+                next_downloaders = normalized_downloaders
+                requested_active = self._normalize_downloader_id(active_downloader_id_payload, fallback="")
+                if requested_active and requested_active in {d["id"] for d in next_downloaders}:
+                    next_active_downloader_id = requested_active
+                elif next_active_downloader_id not in {d["id"] for d in next_downloaders}:
+                    next_active_downloader_id = next_downloaders[0]["id"]
 
-                for key, value in merged.items():
-                    self._upsert_config(conn, tenant_id, key, str(value))
+            if active_downloader_touched and not downloaders_touched:
+                requested_active = self._normalize_downloader_id(active_downloader_id_payload, fallback="")
+                if requested_active and requested_active not in {d["id"] for d in next_downloaders}:
+                    raise ValueError("选择的下载器不存在")
+                if requested_active:
+                    next_active_downloader_id = requested_active
+
+            if transmission_touched:
+                if not next_downloaders:
+                    next_downloaders = [
+                        self._normalize_downloader_profile(
+                            {"id": "default", "name": "默认下载器", **self._load_legacy_transmission(existing_raw_config)},
+                            fallback_id="default",
+                            fallback_name="默认下载器",
+                        )
+                    ]
+                    next_active_downloader_id = next_downloaders[0]["id"]
+
+                target_id = next_active_downloader_id if next_active_downloader_id else next_downloaders[0]["id"]
+                updated_downloaders: List[Dict[str, Any]] = []
+                found_target = False
+                for profile in next_downloaders:
+                    current = dict(profile)
+                    if current.get("id") == target_id:
+                        found_target = True
+                        merged = dict(current)
+                        for key in DEFAULT_TRANSMISSION.keys():
+                            if key not in transmission_payload:
+                                continue
+                            incoming = transmission_payload.get(key)
+                            if key == "backend_type":
+                                merged[key] = self._normalize_downloader_type(incoming)
+                            elif key in {"request_timeout", "max_retries"}:
+                                merged[key] = self._normalize_positive_int(incoming, merged.get(key, DEFAULT_TRANSMISSION[key]), 1)
+                            elif key == "retry_delay":
+                                merged[key] = self._normalize_positive_int(incoming, merged.get(key, DEFAULT_TRANSMISSION[key]), 0)
+                            else:
+                                merged[key] = str(incoming or "")
+                        current = self._normalize_downloader_profile(merged, fallback_id=current.get("id") or "default", fallback_name=current.get("name") or "")
+                    updated_downloaders.append(current)
+                if not found_target and updated_downloaders:
+                    next_active_downloader_id = updated_downloaders[0]["id"]
+                next_downloaders = updated_downloaders
+
+            downloader_config_changed = transmission_touched or downloaders_touched or active_downloader_touched
+            if downloader_config_changed:
+                if not next_downloaders:
+                    raise ValueError("至少保留一个下载器")
+                valid_ids = {d["id"] for d in next_downloaders}
+                if next_active_downloader_id not in valid_ids:
+                    next_active_downloader_id = next_downloaders[0]["id"]
+
+                active_profile = next((d for d in next_downloaders if d["id"] == next_active_downloader_id), next_downloaders[0])
+                self._upsert_config(conn, tenant_id, "downloaders_json", json.dumps(next_downloaders, ensure_ascii=False))
+                self._upsert_config(conn, tenant_id, "active_downloader_id", next_active_downloader_id)
+                for key in DEFAULT_TRANSMISSION.keys():
+                    self._upsert_config(conn, tenant_id, key, str(active_profile.get(key, DEFAULT_TRANSMISSION[key])))
 
             rss_modes_payload = payload.get("rss_modes")
             rss_modes = rss_modes_payload if isinstance(rss_modes_payload, dict) else {}
@@ -881,6 +1112,8 @@ class TenantStore:
                     (tenant_id,),
                 ).fetchall()
                 valid_modes = {str(r["mode"]).strip().lower() for r in mode_rows if str(r["mode"]).strip()}
+                valid_downloader_ids = {str((d or {}).get("id") or "").strip() for d in next_downloaders if str((d or {}).get("id") or "").strip()}
+                default_schedule_downloader_id = next_active_downloader_id if next_active_downloader_id in valid_downloader_ids else (next_downloaders[0]["id"] if next_downloaders else "")
 
                 for raw in schedules_payload:
                     if not isinstance(raw, dict):
@@ -890,6 +1123,9 @@ class TenantStore:
                         continue
                     if mode_key not in valid_modes:
                         raise ValueError(f"自动下载任务模式不存在: {mode_key}")
+                    schedule_downloader_id = self._normalize_downloader_id(raw.get("downloader_id"), fallback=default_schedule_downloader_id)
+                    if schedule_downloader_id not in valid_downloader_ids:
+                        schedule_downloader_id = default_schedule_downloader_id
                     run_time = self._normalize_schedule_time(raw.get("run_time"))
                     keywords = self._normalize_schedule_keywords(raw.get("keywords"))
                     schedule_name = str(raw.get("schedule_name") or mode_key).strip() or mode_key
@@ -897,6 +1133,7 @@ class TenantStore:
                         {
                             "schedule_name": schedule_name[:80],
                             "mode": mode_key,
+                            "downloader_id": schedule_downloader_id,
                             "keywords_json": json.dumps(keywords, ensure_ascii=False),
                             "run_time": run_time,
                             "timezone": DEFAULT_SCHEDULE_TZ,
@@ -911,13 +1148,14 @@ class TenantStore:
                     conn.execute(
                         """
                         INSERT INTO tenant_download_schedules(
-                            tenant_id, schedule_name, mode, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+                            tenant_id, schedule_name, mode, downloader_id, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
                         """,
                         (
                             tenant_id,
                             schedule["schedule_name"],
                             schedule["mode"],
+                            schedule["downloader_id"],
                             schedule["keywords_json"],
                             schedule["run_time"],
                             schedule["timezone"],
@@ -937,6 +1175,9 @@ class TenantStore:
                     "updated_name": bool(new_name),
                     "updated_status": payload.get("tenant_status") if payload.get("tenant_status") in {"active", "disabled"} else "",
                     "updated_transmission": transmission_touched,
+                    "updated_downloaders": downloaders_touched,
+                    "updated_active_downloader": active_downloader_touched,
+                    "downloader_count": len(next_downloaders) if (transmission_touched or downloaders_touched or active_downloader_touched) else 0,
                     "updated_modes": list(normalized_modes.keys()) if rss_modes_touched else [],
                     "rss_modes_replace": rss_modes_replace,
                     "updated_schedules": len(normalized_schedules) if schedules_touched else 0,
@@ -972,7 +1213,7 @@ class TenantStore:
             rows = conn.execute(
                 """
                 SELECT
-                    s.id, s.schedule_name, s.mode, s.keywords_json, s.run_time, s.timezone, s.enabled, s.last_run_date,
+                    s.id, s.schedule_name, s.mode, s.downloader_id, s.keywords_json, s.run_time, s.timezone, s.enabled, s.last_run_date,
                     t.tenant_key, t.tenant_name, t.tenant_status
                 FROM tenant_download_schedules s
                 JOIN tenants t ON t.id = s.tenant_id
@@ -1019,6 +1260,7 @@ class TenantStore:
                     "tenant_name": str(row["tenant_name"]),
                     "schedule_name": str(row["schedule_name"]),
                     "mode": str(row["mode"]),
+                    "downloader_id": str(row["downloader_id"] or ""),
                     "keywords": keywords,
                     "run_time": schedule_time,
                     "timezone": str(row["timezone"] or DEFAULT_SCHEDULE_TZ),
@@ -1205,14 +1447,16 @@ class TenantStore:
                 (tenant_id, task_id, json.dumps(payload, ensure_ascii=False), self._now()),
             )
 
-    def list_history(self, tenant_key: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def list_history(self, tenant_key: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
         with self._connect() as conn:
             tenant_id = self._get_tenant_id(conn, tenant_key)
             if tenant_id is None:
                 raise ValueError(f"租户不存在: {tenant_key}")
+            safe_limit = max(1, min(int(limit), 200))
+            safe_offset = max(0, int(offset))
             rows = conn.execute(
-                "SELECT payload_json FROM download_history WHERE tenant_id = ? ORDER BY id DESC LIMIT ?",
-                (tenant_id, max(1, min(int(limit), 200))),
+                "SELECT payload_json FROM download_history WHERE tenant_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                (tenant_id, safe_limit, safe_offset),
             ).fetchall()
         result: List[Dict[str, Any]] = []
         for row in rows:

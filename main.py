@@ -11,9 +11,9 @@ from flask import Flask, jsonify, redirect, render_template, request, session, u
 
 from config.logging_config import setup_logging
 from config.settings import Settings
+from services.downloader_client_factory import create_downloader_client, normalize_downloader_type
 from services.multi_tenant_download_service import MultiTenantDownloadService
 from services.tenant_store import TenantStore
-from services.transmission_client import TransmissionClient
 
 logger = setup_logging("app")
 
@@ -143,6 +143,7 @@ class AutoDownloadScheduler:
     def _run_single_job(self, job: Dict, task_id: str):
         tenant_key = str(job.get("tenant_key") or "").strip().lower()
         mode = str(job.get("mode") or "").strip()
+        downloader_id = str(job.get("downloader_id") or "").strip()
         keywords = job.get("keywords") or []
         schedule_name = str(job.get("schedule_name") or "")
 
@@ -154,14 +155,16 @@ class AutoDownloadScheduler:
                 task_id=task_id,
                 trigger="schedule",
                 schedule_name=schedule_name,
+                downloader_id=downloader_id or None,
                 progress_callback=lambda p: self.registry.set_progress(task_id, p),
             )
             self.registry.set_progress(task_id, {"status": "completed", "message": f"定时任务完成：{schedule_name}", "result": result})
             logger.info(
-                "定时任务完成 tenant=%s mode=%s schedule=%s added=%s skipped=%s failed=%s",
+                "定时任务完成 tenant=%s mode=%s schedule=%s downloader=%s added=%s skipped=%s failed=%s",
                 tenant_key,
                 mode,
                 schedule_name,
+                downloader_id or "default",
                 result.get("statistics", {}).get("added_count", 0),
                 result.get("statistics", {}).get("skipped_count", 0),
                 result.get("statistics", {}).get("failed_count", 0),
@@ -508,14 +511,8 @@ def api_user_status():
     try:
         config = store.get_tenant_config(tenant_key)
         tr = config["transmission"]
-        transmission_client = TransmissionClient(
-            host=tr["host"],
-            username=tr["username"],
-            password=tr["password"],
-            request_timeout=tr["request_timeout"],
-            max_retries=tr["max_retries"],
-            retry_delay=tr["retry_delay"],
-        )
+        downloader_client = create_downloader_client(tr)
+        downloader_type = normalize_downloader_type(tr.get("backend_type"))
         history_count = store.count_history(tenant_key)
         return jsonify(
             {
@@ -523,8 +520,11 @@ def api_user_status():
                 "tenant_key": tenant_key,
                 "tenant_name": config["tenant_name"],
                 "tenant_status": config.get("tenant_status", "active"),
-                "transmission_connected": transmission_client.test_connection(),
+                "transmission_connected": downloader_client.test_connection(),
                 "transmission_host": tr["host"],
+                "downloader_type": downloader_type,
+                "downloaders": config.get("downloaders", []),
+                "active_downloader_id": config.get("active_downloader_id", ""),
                 "running": task_registry.is_running(tenant_key),
                 "history_count": history_count,
                 "rss_modes": config.get("rss_modes", {}),
@@ -542,7 +542,7 @@ def api_user_test_transmission():
 
     tenant_key = current_user_tenant_key()
     data = request.get_json(silent=True) or {}
-    incoming = data.get("transmission") or {}
+    incoming = data.get("transmission") or data.get("downloader") or {}
 
     try:
         config = store.get_tenant_config(tenant_key)
@@ -556,6 +556,9 @@ def api_user_test_transmission():
             return parsed if parsed >= min_value else min_value
 
         tr = {
+            "id": str(incoming.get("id") or "").strip(),
+            "name": str(incoming.get("name") or "").strip(),
+            "backend_type": normalize_downloader_type(incoming.get("backend_type", base.get("backend_type", "transmission"))),
             "host": str(incoming.get("host", base.get("host", ""))).strip(),
             "username": str(incoming.get("username", base.get("username", ""))).strip(),
             "password": str(incoming.get("password", base.get("password", ""))),
@@ -564,23 +567,18 @@ def api_user_test_transmission():
             "retry_delay": to_int(incoming.get("retry_delay", base.get("retry_delay", 2)), 2, 0),
         }
         if not tr["host"]:
-            return jsonify({"success": False, "message": "Transmission Host 不能为空", "transmission_connected": False})
+            return jsonify({"success": False, "message": "下载器 Host 不能为空", "transmission_connected": False})
 
-        transmission_client = TransmissionClient(
-            host=tr["host"],
-            username=tr["username"],
-            password=tr["password"],
-            request_timeout=tr["request_timeout"],
-            max_retries=tr["max_retries"],
-            retry_delay=tr["retry_delay"],
-        )
-        connected = transmission_client.test_connection()
+        downloader_client = create_downloader_client(tr)
+        connected = downloader_client.test_connection()
         return jsonify(
             {
                 "success": True,
                 "tenant_key": tenant_key,
                 "transmission_host": tr["host"],
                 "transmission_connected": connected,
+                "downloader_type": tr["backend_type"],
+                "downloader_id": tr["id"],
                 "message": "连接成功" if connected else "连接失败，请检查 Host/账号/密码",
             }
         )
@@ -594,12 +592,30 @@ def api_user_history():
     if err:
         return err
     tenant_key = current_user_tenant_key()
-    limit = request.args.get("limit", 20, type=int)
+    page = request.args.get("page", 1, type=int)
+    page_size = request.args.get("page_size", None, type=int)
+    limit = request.args.get("limit", None, type=int)
+    if page_size is None:
+        page_size = limit if limit is not None else 20
+    page = max(1, int(page or 1))
+    page_size = max(1, min(int(page_size or 20), 200))
+    offset = (page - 1) * page_size
     try:
-        history = store.list_history(tenant_key, limit=limit)
-        return jsonify({"success": True, "history": history})
+        total = store.count_history(tenant_key)
+        history = store.list_history(tenant_key, limit=page_size, offset=offset)
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+        return jsonify(
+            {
+                "success": True,
+                "history": history,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+            }
+        )
     except Exception as exc:
-        return jsonify({"success": False, "message": str(exc), "history": []})
+        return jsonify({"success": False, "message": str(exc), "history": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0})
 
 
 @app.route("/api/user/preview", methods=["POST"])
@@ -610,10 +626,11 @@ def api_user_preview():
     data = request.get_json(silent=True) or {}
     tenant_key = current_user_tenant_key()
     mode = (data.get("mode") or "movie").strip()
+    downloader_id = (data.get("downloader_id") or "").strip()
 
     try:
         config = active_tenant_or_error(tenant_key)
-        items = download_service.fetch_rss_items(tenant_key, mode)
+        items = download_service.fetch_rss_items(tenant_key, mode, downloader_id=downloader_id or None)
         mode_cfg = config["rss_modes"][mode]
         return jsonify({
             "success": True,
@@ -636,6 +653,7 @@ def api_user_download():
     tenant_key = current_user_tenant_key()
     mode = (data.get("mode") or "movie").strip()
     keywords = parse_keywords(data.get("keywords"))
+    downloader_id = (data.get("downloader_id") or "").strip()
 
     if task_registry.is_running(tenant_key):
         return jsonify({"success": False, "message": "该租户已有任务执行中"})
@@ -657,6 +675,7 @@ def api_user_download():
                 keywords=keywords,
                 task_id=task_id,
                 trigger="manual",
+                downloader_id=downloader_id or None,
                 progress_callback=lambda p: task_registry.set_progress(task_id, p),
             )
             task_registry.set_progress(task_id, {"status": "completed", "result": result})
@@ -680,12 +699,13 @@ def api_user_download_one():
     mode = (data.get("mode") or "movie").strip()
     url = (data.get("url") or "").strip()
     title = (data.get("title") or "").strip()
+    downloader_id = (data.get("downloader_id") or "").strip()
 
     if not url:
         return jsonify({"success": False, "message": "URL 不能为空"})
 
     try:
-        result = download_service.add_single_torrent(tenant_key, mode, url, title=title)
+        result = download_service.add_single_torrent(tenant_key, mode, url, title=title, downloader_id=downloader_id or None)
         return jsonify(result)
     except Exception as exc:
         return jsonify({"success": False, "message": str(exc)})

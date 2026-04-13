@@ -6,9 +6,9 @@ from typing import Callable, Dict, List, Optional
 import requests
 
 from config.logging_config import setup_logging
+from services.downloader_client_factory import create_downloader_client
 from services.rss_parser import RSSParser
 from services.tenant_store import TenantStore
-from services.transmission_client import TransmissionClient
 
 logger = setup_logging("multi_tenant_download")
 
@@ -38,17 +38,23 @@ class MultiTenantDownloadService:
         self.tenant_store = tenant_store
         self.rss_parser = RSSParser()
 
-    def _tenant_client(self, tenant_key: str) -> TransmissionClient:
+    @staticmethod
+    def _pick_downloader(config: Dict, downloader_id: Optional[str] = None) -> Dict:
+        downloaders = config.get("downloaders") or []
+        active_id = str(config.get("active_downloader_id") or "").strip()
+        requested_id = str(downloader_id or "").strip()
+        target_id = requested_id or active_id
+        for item in downloaders:
+            if str((item or {}).get("id") or "") == target_id:
+                return item
+        if downloaders:
+            return downloaders[0]
+        return config.get("transmission") or {}
+
+    def _tenant_client(self, tenant_key: str, downloader_id: Optional[str] = None):
         config = self.tenant_store.get_tenant_config(tenant_key)
-        tr = config["transmission"]
-        return TransmissionClient(
-            host=tr["host"],
-            username=tr["username"],
-            password=tr["password"],
-            request_timeout=int(tr["request_timeout"]),
-            max_retries=int(tr["max_retries"]),
-            retry_delay=int(tr["retry_delay"]),
-        )
+        tr = self._pick_downloader(config, downloader_id=downloader_id)
+        return create_downloader_client(tr)
 
     def _mode_config(self, tenant_key: str, mode: str) -> Dict:
         config = self.tenant_store.get_tenant_config(tenant_key)
@@ -61,9 +67,9 @@ class MultiTenantDownloadService:
             raise ValueError(f"模式 {mode} 未配置 RSS URL")
         return mode_cfg
 
-    def fetch_rss_items(self, tenant_key: str, mode: str) -> List[RSSItem]:
+    def fetch_rss_items(self, tenant_key: str, mode: str, downloader_id: Optional[str] = None) -> List[RSSItem]:
         mode_cfg = self._mode_config(tenant_key, mode)
-        client = self._tenant_client(tenant_key)
+        client = self._tenant_client(tenant_key, downloader_id=downloader_id)
         rss_url = str(mode_cfg["rss_url"]).strip()
         rss_text = self._fetch_rss_text(rss_url, client.request_timeout, client.max_retries, client.retry_delay)
         parsed = self.rss_parser.parse(rss_text)
@@ -125,13 +131,13 @@ class MultiTenantDownloadService:
             raise ValueError(last_status_error)
         raise ValueError(f"RSS 连接失败: {last_exc or 'unknown error'}")
 
-    def add_single_torrent(self, tenant_key: str, mode: str, url: str, title: str = "") -> Dict:
+    def add_single_torrent(self, tenant_key: str, mode: str, url: str, title: str = "", downloader_id: Optional[str] = None) -> Dict:
         config = self.tenant_store.get_tenant_config(tenant_key)
         mode_cfg = (config.get("rss_modes") or {}).get(mode)
         if not mode_cfg:
             return {"success": False, "message": "无效模式"}
 
-        transmission = self._tenant_client(tenant_key)
+        transmission = self._tenant_client(tenant_key, downloader_id=downloader_id)
         result = transmission.add_torrent(url, mode_cfg.get("download_dir", "/downloads"))
         rpc_result = result.get("result")
         if rpc_result in {"success", "torrent-duplicate"}:
@@ -147,12 +153,23 @@ class MultiTenantDownloadService:
         task_id: Optional[str] = None,
         trigger: str = "manual",
         schedule_name: str = "",
+        downloader_id: Optional[str] = None,
         progress_callback: Optional[Callable[[Dict], None]] = None,
     ) -> Dict:
-        mode_cfg = self._mode_config(tenant_key, mode)
-        transmission = self._tenant_client(tenant_key)
+        config = self.tenant_store.get_tenant_config(tenant_key)
+        mode_cfg = (config.get("rss_modes") or {}).get(mode)
+        if not mode_cfg:
+            raise ValueError(f"无效模式: {mode}")
+        if not int(mode_cfg.get("enabled", 1)):
+            raise ValueError(f"模式已禁用: {mode}")
+        if not str(mode_cfg.get("rss_url", "")).strip():
+            raise ValueError(f"模式 {mode} 未配置 RSS URL")
 
-        items = self.fetch_rss_items(tenant_key, mode)
+        selected_downloader = self._pick_downloader(config, downloader_id=downloader_id)
+        selected_downloader_id = str((selected_downloader or {}).get("id") or "")
+        transmission = create_downloader_client(selected_downloader)
+
+        items = self.fetch_rss_items(tenant_key, mode, downloader_id=selected_downloader_id)
         if not items:
             raise ValueError("RSS 获取失败或为空")
 
@@ -219,6 +236,9 @@ class MultiTenantDownloadService:
             "mode_name": mode_cfg.get("mode_name", mode),
             "trigger": "schedule" if str(trigger or "").strip().lower() == "schedule" else "manual",
             "schedule_name": str(schedule_name or "").strip(),
+            "downloader_id": selected_downloader_id,
+            "downloader_name": str((selected_downloader or {}).get("name") or ""),
+            "downloader_type": str((selected_downloader or {}).get("backend_type") or ""),
             "success": True,
             "statistics": {
                 "total": total,

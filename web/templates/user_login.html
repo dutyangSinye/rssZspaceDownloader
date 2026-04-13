@@ -33,7 +33,7 @@
       border:1px solid rgba(15,23,42,.06);
       border-radius:16px;
       box-shadow:0 10px 30px rgba(15,23,42,.08);
-      padding:20px;
+      padding:clamp(14px,2.4vw,20px);
     }
     .title{font-size:24px;font-weight:700;margin-bottom:4px}
     .sub{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5}
@@ -104,6 +104,9 @@
       border-radius:14px;
       box-shadow:0 20px 50px rgba(0,0,0,.2);
       overflow:hidden;
+      max-height:calc(100vh - 24px);
+      display:flex;
+      flex-direction:column;
     }
     .modal-head{
       display:flex;
@@ -121,7 +124,10 @@
       cursor:pointer;
       color:#6b7280;
     }
-    .modal-body{padding:14px 16px}
+    .modal-body{
+      padding:14px 16px;
+      overflow-y:auto;
+    }
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .modal-foot{
       display:flex;
@@ -149,14 +155,35 @@
       cursor:pointer;
     }
     .btn-success:disabled{opacity:.65;cursor:not-allowed}
-    @media (max-width:680px){.grid{grid-template-columns:1fr}}
+    @media (max-width:680px){
+      .grid{grid-template-columns:1fr}
+      .title{font-size:22px}
+      .modal-head{padding:12px 14px}
+      .modal-body{padding:12px 14px}
+      .modal-foot{padding:10px 14px}
+    }
+    @media (max-width:560px){
+      body{padding:10px}
+      .card{border-radius:12px}
+      .title{font-size:20px}
+      .sub{font-size:12px}
+      .modal-foot{
+        flex-direction:column-reverse;
+        align-items:stretch;
+      }
+      .btn-ghost,
+      .btn-success{
+        width:100%;
+        min-width:0;
+      }
+    }
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <div class="title">用户登录</div>
-    <div class="sub">登录后可进入租户控制台，配置 Transmission / RSS 并执行下载任务。</div>
+    <div class="sub">登录后可进入租户控制台，配置 Transmission / qBittorrent / RSS 并执行下载任务。</div>
 
     <div class="field">
       <label for="login-username">用户名</label>

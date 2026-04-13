@@ -14,23 +14,57 @@
       min-height:100vh;
       color:#1f2937;
     }
-    .page{max-width:1360px;margin:0 auto;padding:16px}
+    .page{max-width:1360px;margin:0 auto;padding:clamp(10px,2vw,16px)}
     .top{margin-bottom:12px}
+    .top-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .top-actions{display:flex;gap:8px;flex-wrap:wrap}
     .head-title{font-size:20px;font-weight:700}
     .head-sub{font-size:13px;color:#6b7280;margin-top:4px}
     .mono{font-family:Consolas,Menlo,monospace}
     .action-row{display:flex;flex-wrap:wrap;gap:6px}
+    .table-wrap{
+      width:100%;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+    .table-wrap .el-table{min-width:960px}
+    .table-wrap.table-audit .el-table{min-width:860px}
+    .audit-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    @media (max-width:900px){
+      .top-actions{width:100%}
+      .top-actions .el-button{flex:1;min-width:0}
+      .table-wrap .el-table{min-width:900px}
+    }
+    @media (max-width:768px){
+      .head-title{font-size:18px}
+      .head-sub{font-size:12px}
+      .table-wrap{margin:0 -2px}
+      .table-wrap .el-table{min-width:860px}
+      .table-wrap.table-audit .el-table{min-width:760px}
+    }
   </style>
 </head>
 <body>
 <div id="app" class="page">
   <el-card class="top" shadow="never">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+    <div class="top-head">
       <div>
         <div class="head-title">管理员后台</div>
         <div class="head-sub">{{ adminWho }}</div>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div class="top-actions">
         <el-button type="warning" plain @click="openPasswordDialog">账号安全</el-button>
         <el-button @click="refreshAll">刷新</el-button>
         <el-button type="danger" plain @click="logout">退出登录</el-button>
@@ -54,51 +88,55 @@
     <el-col :xs="24" :lg="15">
       <el-card shadow="never" style="margin-bottom:12px;">
         <template #header><b>租户列表</b></template>
-        <el-table :data="tenants" stripe v-loading="tenantLoading" empty-text="暂无租户">
-          <el-table-column prop="tenant_key" label="Key" width="180">
-            <template #default="scope"><span class="mono">{{ scope.row.tenant_key }}</span></template>
-          </el-table-column>
-          <el-table-column prop="tenant_name" label="名称" min-width="160" />
-          <el-table-column label="状态" width="100">
-            <template #default="scope">
-              <el-tag :type="scope.row.tenant_status==='active' ? 'success' : 'warning'">{{ scope.row.tenant_status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="updated_at" label="更新时间" width="180" />
-          <el-table-column label="操作" min-width="330" fixed="right">
-            <template #default="scope">
-              <div class="action-row">
-                <el-button size="small" @click="setStatus(scope.row.tenant_key, 'active')">启用</el-button>
-                <el-button size="small" type="warning" @click="setStatus(scope.row.tenant_key, 'disabled')">停用</el-button>
-                <el-button size="small" type="danger" plain @click="delTenant(scope.row.tenant_key)">软删除</el-button>
-                <el-button size="small" type="danger" @click="hardDelTenant(scope.row.tenant_key)" :disabled="scope.row.tenant_key==='default'">硬删除</el-button>
-                <el-button size="small" type="primary" plain @click="loadAudits(scope.row.tenant_key)">查看审计</el-button>
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="table-wrap">
+          <el-table :data="tenants" stripe v-loading="tenantLoading" empty-text="暂无租户">
+            <el-table-column prop="tenant_key" label="Key" width="180">
+              <template #default="scope"><span class="mono">{{ scope.row.tenant_key }}</span></template>
+            </el-table-column>
+            <el-table-column prop="tenant_name" label="名称" min-width="160" />
+            <el-table-column label="状态" width="100">
+              <template #default="scope">
+                <el-tag :type="scope.row.tenant_status==='active' ? 'success' : 'warning'">{{ scope.row.tenant_status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="updated_at" label="更新时间" width="180" />
+            <el-table-column label="操作" min-width="330" fixed="right">
+              <template #default="scope">
+                <div class="action-row">
+                  <el-button size="small" @click="setStatus(scope.row.tenant_key, 'active')">启用</el-button>
+                  <el-button size="small" type="warning" @click="setStatus(scope.row.tenant_key, 'disabled')">停用</el-button>
+                  <el-button size="small" type="danger" plain @click="delTenant(scope.row.tenant_key)">软删除</el-button>
+                  <el-button size="small" type="danger" @click="hardDelTenant(scope.row.tenant_key)" :disabled="scope.row.tenant_key==='default'">硬删除</el-button>
+                  <el-button size="small" type="primary" plain @click="loadAudits(scope.row.tenant_key)">查看审计</el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </el-card>
     </el-col>
   </el-row>
 
   <el-card shadow="never">
     <template #header>
-      <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="audit-head">
         <b>审计日志</b>
         <span class="head-sub">当前租户：{{ selectedTenant }}</span>
       </div>
     </template>
-    <el-table :data="audits" stripe v-loading="auditLoading" empty-text="暂无日志">
-      <el-table-column prop="action" label="动作" min-width="180" />
-      <el-table-column prop="actor" label="操作者" width="180" />
-      <el-table-column label="详情" min-width="260">
-        <template #default="scope">{{ formatDetail(scope.row.detail) }}</template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="时间" width="180" />
-    </el-table>
+    <div class="table-wrap table-audit">
+      <el-table :data="audits" stripe v-loading="auditLoading" empty-text="暂无日志">
+        <el-table-column prop="action" label="动作" min-width="180" />
+        <el-table-column prop="actor" label="操作者" width="180" />
+        <el-table-column label="详情" min-width="260">
+          <template #default="scope">{{ formatDetail(scope.row.detail) }}</template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="时间" width="180" />
+      </el-table>
+    </div>
   </el-card>
 
-  <el-dialog v-model="passwordDialogVisible" title="账号安全" width="560px" @closed="resetPasswordForm">
+  <el-dialog v-model="passwordDialogVisible" title="账号安全" width="min(560px, 96vw)" @closed="resetPasswordForm">
     <div class="head-sub" style="margin-bottom:8px;">可同步默认租户（default/admin）密码，便于统一维护。</div>
     <el-form label-position="top">
       <el-row :gutter="10">
