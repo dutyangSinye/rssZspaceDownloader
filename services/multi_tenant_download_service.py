@@ -145,6 +145,8 @@ class MultiTenantDownloadService:
         mode: str,
         keywords: Optional[List[str]] = None,
         task_id: Optional[str] = None,
+        trigger: str = "manual",
+        schedule_name: str = "",
         progress_callback: Optional[Callable[[Dict], None]] = None,
     ) -> Dict:
         mode_cfg = self._mode_config(tenant_key, mode)
@@ -215,6 +217,8 @@ class MultiTenantDownloadService:
             "tenant_key": tenant_key,
             "mode": mode,
             "mode_name": mode_cfg.get("mode_name", mode),
+            "trigger": "schedule" if str(trigger or "").strip().lower() == "schedule" else "manual",
+            "schedule_name": str(schedule_name or "").strip(),
             "success": True,
             "statistics": {
                 "total": total,

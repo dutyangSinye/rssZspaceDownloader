@@ -3,10 +3,11 @@ import json
 import re
 import secrets
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -24,6 +25,9 @@ DEFAULT_RSS_MODES = {
     "tv": {"mode_name": "国产电视剧", "rss_url": "", "download_dir": "/tv", "enabled": 1},
     "adult": {"mode_name": "收藏成人内容", "rss_url": "", "download_dir": "/av", "enabled": 0},
 }
+
+DEFAULT_SCHEDULE_TZ = "Asia/Shanghai"
+FALLBACK_SCHEDULE_TZ = timezone(timedelta(hours=8), name="UTC+08")
 
 
 class TenantStore:
@@ -149,14 +153,36 @@ class TenantStore:
                     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
                     UNIQUE (tenant_id, username)
                 );
+                CREATE TABLE IF NOT EXISTS tenant_download_schedules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER NOT NULL,
+                    schedule_name TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    keywords_json TEXT NOT NULL DEFAULT '[]',
+                    run_time TEXT NOT NULL DEFAULT '03:00',
+                    timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    last_run_date TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+                );
                 CREATE INDEX IF NOT EXISTS idx_download_history_tenant ON download_history(tenant_id, id DESC);
                 CREATE INDEX IF NOT EXISTS idx_downloaded_items_tenant ON downloaded_items(tenant_id);
                 CREATE INDEX IF NOT EXISTS idx_tenant_audit_logs_tenant ON tenant_audit_logs(tenant_id, id DESC);
                 CREATE INDEX IF NOT EXISTS idx_tenant_api_keys_tenant ON tenant_api_keys(tenant_id, key_status, id DESC);
                 CREATE INDEX IF NOT EXISTS idx_tenant_users_tenant ON tenant_users(tenant_id, account_status, id DESC);
+                CREATE INDEX IF NOT EXISTS idx_tenant_download_schedules_tenant ON tenant_download_schedules(tenant_id, enabled, id DESC);
                 """
             )
             self._ensure_column(conn, "tenants", "tenant_status", "TEXT NOT NULL DEFAULT 'active'")
+            self._ensure_column(
+                conn,
+                "tenant_download_schedules",
+                "timezone",
+                f"TEXT NOT NULL DEFAULT '{DEFAULT_SCHEDULE_TZ}'",
+            )
+            self._ensure_column(conn, "tenant_download_schedules", "last_run_date", "TEXT NOT NULL DEFAULT ''")
             conn.execute("UPDATE tenant_users SET user_role = 'user' WHERE user_role <> 'user'")
 
     def _get_tenant_row(self, conn: sqlite3.Connection, tenant_key: str) -> Optional[sqlite3.Row]:
@@ -212,6 +238,57 @@ class TenantStore:
             """,
             (tenant_id, action, (actor or "system")[:64], json.dumps(detail or {}, ensure_ascii=False), self._now()),
         )
+
+    @staticmethod
+    def _normalize_schedule_time(value: Any) -> str:
+        text = str(value or "").strip()
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", text):
+            raise ValueError("自动下载时间格式无效，请使用 HH:MM（24小时制）")
+        return text
+
+    @staticmethod
+    def _normalize_schedule_keywords(value: Any) -> List[str]:
+        if isinstance(value, list):
+            return [str(v).strip() for v in value if str(v).strip()]
+        text = str(value or "").strip()
+        if not text:
+            return []
+        return [v for v in re.split(r"[\s,，]+", text) if v]
+
+    def _list_schedules_by_tenant_id(self, conn: sqlite3.Connection, tenant_id: int) -> List[Dict[str, Any]]:
+        rows = conn.execute(
+            """
+            SELECT id, schedule_name, mode, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
+            FROM tenant_download_schedules
+            WHERE tenant_id = ?
+            ORDER BY id DESC
+            """,
+            (tenant_id,),
+        ).fetchall()
+        result: List[Dict[str, Any]] = []
+        for row in rows:
+            keywords: List[str] = []
+            try:
+                parsed = json.loads(row["keywords_json"] or "[]")
+                if isinstance(parsed, list):
+                    keywords = [str(v).strip() for v in parsed if str(v).strip()]
+            except Exception:
+                keywords = []
+            result.append(
+                {
+                    "id": int(row["id"]),
+                    "schedule_name": str(row["schedule_name"]),
+                    "mode": str(row["mode"]),
+                    "keywords": keywords,
+                    "run_time": str(row["run_time"]),
+                    "timezone": str(row["timezone"] or DEFAULT_SCHEDULE_TZ),
+                    "enabled": 1 if int(row["enabled"] or 0) == 1 else 0,
+                    "last_run_date": str(row["last_run_date"] or ""),
+                    "created_at": str(row["created_at"]),
+                    "updated_at": str(row["updated_at"]),
+                }
+            )
+        return result
 
     def ensure_default_tenant(self, seed: Optional[Dict[str, Any]] = None):
         seed = seed or {}
@@ -599,13 +676,43 @@ class TenantStore:
                     "retry_delay": DEFAULT_TRANSMISSION["retry_delay"],
                 }
                 rss_modes = {}
+                schedules: List[Dict[str, Any]] = []
             else:
                 transmission = (template or {}).get("transmission", DEFAULT_TRANSMISSION)
                 rss_modes = (template or {}).get("rss_modes", DEFAULT_RSS_MODES)
+                schedules = (template or {}).get("schedules", [])
             for key, value in transmission.items():
                 self._upsert_config(conn, new_tenant_id, key, str(value))
             for mode, mode_data in rss_modes.items():
                 self._upsert_mode(conn, new_tenant_id, mode, mode_data)
+            for schedule in schedules:
+                mode_key = str((schedule or {}).get("mode") or "").strip().lower()
+                if not mode_key:
+                    continue
+                run_time = str((schedule or {}).get("run_time") or "03:00").strip()
+                if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", run_time):
+                    run_time = "03:00"
+                keywords = self._normalize_schedule_keywords((schedule or {}).get("keywords", []))
+                schedule_name = str((schedule or {}).get("schedule_name") or mode_key).strip() or mode_key
+                enabled = 1 if int((schedule or {}).get("enabled", 1)) == 1 else 0
+                conn.execute(
+                    """
+                    INSERT INTO tenant_download_schedules(
+                        tenant_id, schedule_name, mode, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+                    """,
+                    (
+                        new_tenant_id,
+                        schedule_name[:80],
+                        mode_key,
+                        json.dumps(keywords, ensure_ascii=False),
+                        run_time,
+                        DEFAULT_SCHEDULE_TZ,
+                        enabled,
+                        now,
+                        now,
+                    ),
+                )
 
             self._log_audit(
                 conn,
@@ -659,6 +766,7 @@ class TenantStore:
                     (tenant_id,),
                 ).fetchone()["c"]
             )
+            schedules = self._list_schedules_by_tenant_id(conn, tenant_id)
 
             return {
                 "tenant_key": row["tenant_key"],
@@ -668,6 +776,7 @@ class TenantStore:
                 "active_api_key_count": active_key_count,
                 "transmission": transmission,
                 "rss_modes": rss_modes,
+                "schedules": schedules,
             }
 
     def update_tenant_config(self, tenant_key: str, payload: Dict[str, Any], actor: str = "system") -> Dict[str, Any]:
@@ -762,6 +871,62 @@ class TenantStore:
                 else:
                     conn.execute("DELETE FROM tenant_rss_modes WHERE tenant_id = ?", (tenant_id,))
 
+            schedules_payload = payload.get("schedules")
+            schedules_touched = isinstance(schedules_payload, list)
+            schedules_replace = bool(payload.get("schedules_replace")) and schedules_touched
+            normalized_schedules: List[Dict[str, Any]] = []
+            if schedules_touched:
+                mode_rows = conn.execute(
+                    "SELECT mode FROM tenant_rss_modes WHERE tenant_id = ?",
+                    (tenant_id,),
+                ).fetchall()
+                valid_modes = {str(r["mode"]).strip().lower() for r in mode_rows if str(r["mode"]).strip()}
+
+                for raw in schedules_payload:
+                    if not isinstance(raw, dict):
+                        continue
+                    mode_key = str(raw.get("mode") or "").strip().lower()
+                    if not mode_key:
+                        continue
+                    if mode_key not in valid_modes:
+                        raise ValueError(f"自动下载任务模式不存在: {mode_key}")
+                    run_time = self._normalize_schedule_time(raw.get("run_time"))
+                    keywords = self._normalize_schedule_keywords(raw.get("keywords"))
+                    schedule_name = str(raw.get("schedule_name") or mode_key).strip() or mode_key
+                    normalized_schedules.append(
+                        {
+                            "schedule_name": schedule_name[:80],
+                            "mode": mode_key,
+                            "keywords_json": json.dumps(keywords, ensure_ascii=False),
+                            "run_time": run_time,
+                            "timezone": DEFAULT_SCHEDULE_TZ,
+                            "enabled": 1 if int(raw.get("enabled", 1)) == 1 else 0,
+                        }
+                    )
+
+                if schedules_replace:
+                    conn.execute("DELETE FROM tenant_download_schedules WHERE tenant_id = ?", (tenant_id,))
+
+                for schedule in normalized_schedules:
+                    conn.execute(
+                        """
+                        INSERT INTO tenant_download_schedules(
+                            tenant_id, schedule_name, mode, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+                        """,
+                        (
+                            tenant_id,
+                            schedule["schedule_name"],
+                            schedule["mode"],
+                            schedule["keywords_json"],
+                            schedule["run_time"],
+                            schedule["timezone"],
+                            schedule["enabled"],
+                            self._now(),
+                            self._now(),
+                        ),
+                    )
+
             conn.execute("UPDATE tenants SET updated_at = ? WHERE id = ?", (self._now(), tenant_id))
             self._log_audit(
                 conn,
@@ -774,6 +939,8 @@ class TenantStore:
                     "updated_transmission": transmission_touched,
                     "updated_modes": list(normalized_modes.keys()) if rss_modes_touched else [],
                     "rss_modes_replace": rss_modes_replace,
+                    "updated_schedules": len(normalized_schedules) if schedules_touched else 0,
+                    "schedules_replace": schedules_replace,
                 },
             )
         return self.get_tenant_config(tenant_key)
@@ -792,6 +959,89 @@ class TenantStore:
             self._log_audit(conn, tenant_id, action="tenant.status.update", actor=actor, detail={"tenant_status": tenant_status})
 
         return self.get_tenant_config(tenant_key)
+
+    def list_due_download_schedules(self, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        if now is None:
+            now_utc = datetime.now(timezone.utc)
+        elif now.tzinfo is None:
+            now_utc = now.replace(tzinfo=FALLBACK_SCHEDULE_TZ).astimezone(timezone.utc)
+        else:
+            now_utc = now.astimezone(timezone.utc)
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    s.id, s.schedule_name, s.mode, s.keywords_json, s.run_time, s.timezone, s.enabled, s.last_run_date,
+                    t.tenant_key, t.tenant_name, t.tenant_status
+                FROM tenant_download_schedules s
+                JOIN tenants t ON t.id = s.tenant_id
+                WHERE s.enabled = 1
+                ORDER BY s.id ASC
+                """
+            ).fetchall()
+
+        due_items: List[Dict[str, Any]] = []
+        for row in rows:
+            if str(row["tenant_status"]) != "active":
+                continue
+            schedule_time = str(row["run_time"] or "").strip()
+            if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", schedule_time):
+                continue
+
+            tz_name = str(row["timezone"] or DEFAULT_SCHEDULE_TZ).strip() or DEFAULT_SCHEDULE_TZ
+            try:
+                tzinfo = ZoneInfo(tz_name)
+            except Exception:
+                tzinfo = FALLBACK_SCHEDULE_TZ
+
+            local_now = now_utc.astimezone(tzinfo)
+            current_hm = local_now.strftime("%H:%M")
+            run_date = local_now.strftime("%Y-%m-%d")
+
+            if current_hm < schedule_time:
+                continue
+            if str(row["last_run_date"] or "") == run_date:
+                continue
+
+            keywords: List[str] = []
+            try:
+                parsed_keywords = json.loads(row["keywords_json"] or "[]")
+                if isinstance(parsed_keywords, list):
+                    keywords = [str(v).strip() for v in parsed_keywords if str(v).strip()]
+            except Exception:
+                keywords = []
+
+            due_items.append(
+                {
+                    "id": int(row["id"]),
+                    "tenant_key": str(row["tenant_key"]),
+                    "tenant_name": str(row["tenant_name"]),
+                    "schedule_name": str(row["schedule_name"]),
+                    "mode": str(row["mode"]),
+                    "keywords": keywords,
+                    "run_time": schedule_time,
+                    "timezone": str(row["timezone"] or DEFAULT_SCHEDULE_TZ),
+                    "run_date": run_date,
+                }
+            )
+        return due_items
+
+    def claim_download_schedule_run(self, schedule_id: int, run_date: str) -> bool:
+        normalized_date = str(run_date or "").strip()
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized_date):
+            raise ValueError("run_date 格式无效")
+
+        with self._lock, self._connect() as conn:
+            cur = conn.execute(
+                """
+                UPDATE tenant_download_schedules
+                SET last_run_date = ?, updated_at = ?
+                WHERE id = ? AND (last_run_date IS NULL OR last_run_date <> ?)
+                """,
+                (normalized_date, self._now(), int(schedule_id), normalized_date),
+            )
+            return int(cur.rowcount or 0) > 0
 
     def delete_tenant(self, tenant_key: str, hard_delete: bool = False, actor: str = "system") -> Dict[str, Any]:
         normalized_key = (tenant_key or "").strip().lower()

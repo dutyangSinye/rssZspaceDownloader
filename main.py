@@ -83,6 +83,96 @@ class TaskRegistry:
             return self._progress.get(task_id)
 
 
+class AutoDownloadScheduler:
+    def __init__(self, tenant_store: TenantStore, service: MultiTenantDownloadService, registry: TaskRegistry):
+        self.tenant_store = tenant_store
+        self.service = service
+        self.registry = registry
+        self.interval_seconds = 30
+        self._thread: Optional[Thread] = None
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = Thread(target=self._loop, daemon=True, name="auto-download-scheduler")
+        self._thread.start()
+        logger.info("自动下载调度器已启动，轮询间隔 %s 秒", self.interval_seconds)
+
+    def _loop(self):
+        while True:
+            try:
+                self._dispatch_due_jobs()
+            except Exception:
+                logger.exception("自动下载调度循环异常")
+            time.sleep(self.interval_seconds)
+
+    def _dispatch_due_jobs(self):
+        due_jobs = self.tenant_store.list_due_download_schedules()
+        for job in due_jobs:
+            tenant_key = str(job.get("tenant_key") or "").strip().lower()
+            if not tenant_key:
+                continue
+            if self.registry.is_running(tenant_key):
+                continue
+
+            try:
+                active_tenant_or_error(tenant_key)
+            except Exception as exc:
+                logger.warning("跳过定时任务，租户状态异常 tenant=%s, err=%s", tenant_key, exc)
+                continue
+
+            schedule_id = int(job.get("id") or 0)
+            run_date = str(job.get("run_date") or "")
+            if schedule_id <= 0 or not run_date:
+                continue
+
+            try:
+                claimed = self.tenant_store.claim_download_schedule_run(schedule_id, run_date)
+            except Exception as exc:
+                logger.warning("定时任务 claim 失败 schedule_id=%s, err=%s", schedule_id, exc)
+                continue
+            if not claimed:
+                continue
+
+            task_id = f"auto_{tenant_key}_{schedule_id}_{int(time.time())}_{uuid4().hex[:6]}"
+            self.registry.start(tenant_key, task_id)
+            schedule_name = str(job.get("schedule_name") or f"schedule-{schedule_id}")
+            self.registry.set_progress(task_id, {"status": "fetching", "message": f"定时任务开始：{schedule_name}"})
+            Thread(target=self._run_single_job, args=(job, task_id), daemon=True).start()
+
+    def _run_single_job(self, job: Dict, task_id: str):
+        tenant_key = str(job.get("tenant_key") or "").strip().lower()
+        mode = str(job.get("mode") or "").strip()
+        keywords = job.get("keywords") or []
+        schedule_name = str(job.get("schedule_name") or "")
+
+        try:
+            result = self.service.execute_download(
+                tenant_key=tenant_key,
+                mode=mode,
+                keywords=keywords or None,
+                task_id=task_id,
+                trigger="schedule",
+                schedule_name=schedule_name,
+                progress_callback=lambda p: self.registry.set_progress(task_id, p),
+            )
+            self.registry.set_progress(task_id, {"status": "completed", "message": f"定时任务完成：{schedule_name}", "result": result})
+            logger.info(
+                "定时任务完成 tenant=%s mode=%s schedule=%s added=%s skipped=%s failed=%s",
+                tenant_key,
+                mode,
+                schedule_name,
+                result.get("statistics", {}).get("added_count", 0),
+                result.get("statistics", {}).get("skipped_count", 0),
+                result.get("statistics", {}).get("failed_count", 0),
+            )
+        except Exception as exc:
+            logger.exception("定时任务执行失败 tenant=%s mode=%s schedule=%s", tenant_key, mode, schedule_name)
+            self.registry.set_progress(task_id, {"status": "error", "message": f"定时任务失败：{exc}"})
+        finally:
+            self.registry.finish(tenant_key, task_id)
+
+
 store = TenantStore(Settings.DB_PATH)
 store.ensure_default_tenant(Settings.default_tenant_seed())
 store.ensure_default_identities(
@@ -94,6 +184,7 @@ store.ensure_default_identities(
 )
 download_service = MultiTenantDownloadService(store)
 task_registry = TaskRegistry()
+auto_scheduler = AutoDownloadScheduler(store, download_service, task_registry)
 
 
 def validate_tenant_key(tenant_key: str) -> bool:
@@ -565,6 +656,7 @@ def api_user_download():
                 mode=mode,
                 keywords=keywords,
                 task_id=task_id,
+                trigger="manual",
                 progress_callback=lambda p: task_registry.set_progress(task_id, p),
             )
             task_registry.set_progress(task_id, {"status": "completed", "result": result})
@@ -720,6 +812,7 @@ def api_admin_migrate_legacy_history():
 
 
 if __name__ == "__main__":
+    auto_scheduler.start()
     logger.info("=" * 50)
     logger.info("RSS Downloader - User/Admin Separated")
     logger.info("用户端: http://localhost:%s/user/login", Settings.PORT)

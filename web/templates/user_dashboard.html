@@ -168,9 +168,17 @@
           <div class="block-title" style="margin:0;">下载历史</div>
         </template>
         <el-table :data="history" stripe style="width:100%" empty-text="暂无历史">
+          <el-table-column label="类型" width="110">
+            <template #default="scope">
+              <el-tag :type="scope.row.trigger === 'schedule' ? 'warning' : 'success'" effect="light">
+                {{ scope.row.trigger === 'schedule' ? '定时任务' : '手动下载' }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="模式" min-width="220">
             <template #default="scope">
               <div>{{ scope.row.mode_name || scope.row.mode || '-' }}</div>
+              <div class="head-sub" v-if="scope.row.trigger === 'schedule' && scope.row.schedule_name">计划：{{ scope.row.schedule_name }}</div>
             </template>
           </el-table-column>
           <el-table-column label="统计" min-width="260">
@@ -179,6 +187,11 @@
             </template>
           </el-table-column>
           <el-table-column prop="time" label="时间" width="180" />
+          <el-table-column label="操作" width="100">
+            <template #default="scope">
+              <el-button type="primary" link @click="openHistoryDetail(scope.row)">详情</el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </el-card>
     </div>
@@ -268,6 +281,54 @@
                 </div>
               </div>
             </div>
+
+            <div class="config-block">
+              <div class="block-title" style="margin-bottom:8px;">自动下载计划（每日）</div>
+              <div class="head-sub" style="margin-bottom:10px;">关键词留空时表示全量下载（适合收藏电影/成人）；也可填写关键词用于剧集筛选。</div>
+              <div class="rss-toolbar">
+                <el-tag type="info" effect="plain">当前计划数：{{ config.schedules.length }}</el-tag>
+                <el-button type="primary" plain @click="openAddScheduleDialog">新增计划</el-button>
+              </div>
+              <el-empty
+                v-if="!config.schedules.length"
+                description="暂无自动下载计划"
+                :image-size="72"
+              ></el-empty>
+              <el-table v-else :data="config.schedules" size="small" stripe style="width:100%">
+                <el-table-column label="计划名称" min-width="180">
+                  <template #default="scope">
+                    <el-input v-model="scope.row.schedule_name" placeholder="例如：每日成人收藏" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="RSS 类型" min-width="180">
+                  <template #default="scope">
+                    <el-select v-model="scope.row.mode" placeholder="请选择类型" style="width:100%">
+                      <el-option v-for="m in allModes" :key="m.mode" :label="`${m.mode_name} (${m.mode})`" :value="m.mode" />
+                    </el-select>
+                  </template>
+                </el-table-column>
+                <el-table-column label="执行时间" width="130">
+                  <template #default="scope">
+                    <el-input v-model="scope.row.run_time" placeholder="03:30" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="关键词（可空）" min-width="220">
+                  <template #default="scope">
+                    <el-input v-model="scope.row.keywords_text" placeholder="空格或逗号分隔" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="启用" width="90">
+                  <template #default="scope">
+                    <el-switch v-model="scope.row.enabled" :active-value="1" :inactive-value="0" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="90">
+                  <template #default="scope">
+                    <el-button type="danger" link @click="removeScheduleConfirm(scope.$index)">删除</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
 
           <div class="action-bar">
@@ -293,6 +354,32 @@
             <template #footer>
               <el-button @click="addModeVisible=false">取消</el-button>
               <el-button type="primary" @click="confirmAddMode">确认新增</el-button>
+            </template>
+          </el-dialog>
+
+          <el-dialog v-model="addScheduleVisible" title="新增每日自动下载计划" width="560px">
+            <el-form label-position="top">
+              <el-form-item label="计划名称">
+                <el-input v-model="newSchedule.schedule_name" placeholder="例如：每日电影收藏" />
+              </el-form-item>
+              <el-form-item label="RSS 类型">
+                <el-select v-model="newSchedule.mode" placeholder="请选择类型" style="width:100%">
+                  <el-option v-for="m in allModes" :key="m.mode" :label="`${m.mode_name} (${m.mode})`" :value="m.mode" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="执行时间（每日）">
+                <el-input v-model="newSchedule.run_time" placeholder="03:30（HH:MM）" />
+              </el-form-item>
+              <el-form-item label="关键词（可空）">
+                <el-input v-model="newSchedule.keywords_text" placeholder="空格或逗号分隔；留空=全量下载" />
+              </el-form-item>
+              <el-form-item label="启用">
+                <el-switch v-model="newSchedule.enabled" :active-value="1" :inactive-value="0" />
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="addScheduleVisible=false">取消</el-button>
+              <el-button type="primary" @click="confirmAddSchedule">确认新增</el-button>
             </template>
           </el-dialog>
         </div>
@@ -326,6 +413,51 @@
       <el-button type="primary" :loading="changingPassword" @click="changePassword">确认修改</el-button>
     </template>
   </el-dialog>
+
+  <el-dialog v-model="historyDetailVisible" title="下载历史详情" width="820px">
+    <template v-if="historyDetail">
+      <el-descriptions :column="2" border size="small" style="margin-bottom:10px;">
+        <el-descriptions-item label="类型">{{ historyDetail.trigger === 'schedule' ? '定时任务' : '手动下载' }}</el-descriptions-item>
+        <el-descriptions-item label="模式">{{ historyDetail.mode_name || historyDetail.mode || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="时间">{{ historyDetail.time || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="计划名">{{ historyDetail.schedule_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="新增">{{ historyDetail.statistics?.added_count ?? 0 }}</el-descriptions-item>
+        <el-descriptions-item label="跳过">{{ historyDetail.statistics?.skipped_count ?? 0 }}</el-descriptions-item>
+        <el-descriptions-item label="失败">{{ historyDetail.statistics?.failed_count ?? 0 }}</el-descriptions-item>
+      </el-descriptions>
+
+      <el-tabs v-model="historyDetailTab">
+        <el-tab-pane label="成功下载" name="added">
+          <el-empty v-if="!(historyDetail.added_torrents || []).length" description="无新增下载"></el-empty>
+          <el-scrollbar v-else max-height="260px">
+            <div v-for="(name, idx) in historyDetail.added_torrents" :key="`a_${idx}`" style="padding:6px 2px;border-bottom:1px dashed #e5e7eb;">
+              {{ idx + 1 }}. {{ name }}
+            </div>
+          </el-scrollbar>
+        </el-tab-pane>
+        <el-tab-pane label="跳过条目" name="skipped">
+          <el-empty v-if="!(historyDetail.skipped_torrents || []).length" description="无跳过条目"></el-empty>
+          <el-scrollbar v-else max-height="260px">
+            <div v-for="(name, idx) in historyDetail.skipped_torrents" :key="`s_${idx}`" style="padding:6px 2px;border-bottom:1px dashed #e5e7eb;">
+              {{ idx + 1 }}. {{ name }}
+            </div>
+          </el-scrollbar>
+        </el-tab-pane>
+        <el-tab-pane label="失败详情" name="failed">
+          <el-empty v-if="!(historyDetail.failed_torrents || []).length" description="无失败条目"></el-empty>
+          <el-scrollbar v-else max-height="260px">
+            <div v-for="(item, idx) in historyDetail.failed_torrents" :key="`f_${idx}`" style="padding:8px 2px;border-bottom:1px dashed #e5e7eb;">
+              <div><b>{{ idx + 1 }}. {{ item.title || '未命名' }}</b></div>
+              <div class="head-sub">原因：{{ item.error || '-' }}</div>
+            </div>
+          </el-scrollbar>
+        </el-tab-pane>
+      </el-tabs>
+    </template>
+    <template #footer>
+      <el-button type="primary" @click="historyDetailVisible=false">关闭</el-button>
+    </template>
+  </el-dialog>
 </div>
 
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -349,7 +481,11 @@
       const testingTransmission = ref(false);
       const changingPassword = ref(false);
       const addModeVisible = ref(false);
+      const addScheduleVisible = ref(false);
       const passwordDialogVisible = ref(false);
+      const historyDetailVisible = ref(false);
+      const historyDetailTab = ref('added');
+      const historyDetail = ref(null);
       const transmissionConnected = ref(null);
       const transmissionHost = ref('');
       const transmissionStatusMessage = ref('');
@@ -361,14 +497,19 @@
         transmission: {
           host: '', username: '', password: '', request_timeout: 30, max_retries: 3, retry_delay: 2
         },
-        rss_modes: {}
+        rss_modes: {},
+        schedules: [],
       });
       const newMode = reactive({ mode: '', rss_url: '', download_dir: '/downloads', enabled: 1 });
+      const newSchedule = reactive({ schedule_name: '', mode: '', run_time: '03:30', keywords_text: '', enabled: 1 });
 
       const enabledModes = computed(()=>{
         return Object.entries(config.rss_modes || {})
           .filter(([, m]) => Number(m.enabled) === 1)
           .map(([mode, m]) => ({ mode, mode_name: m.mode_name || mode }));
+      });
+      const allModes = computed(()=>{
+        return Object.entries(config.rss_modes || {}).map(([mode, m]) => ({ mode, mode_name: m.mode_name || mode }));
       });
       const rssModeCards = computed(()=>{
         return Object.entries(config.rss_modes || {}).map(([mode, data]) => ({ mode, data }));
@@ -394,11 +535,43 @@
           .slice(0, 32);
       }
 
+      function parseKeywordsText(text){
+        return String(text || '')
+          .trim()
+          .split(/[\s,，]+/)
+          .map(v => v.trim())
+          .filter(Boolean);
+      }
+
+      function isValidRunTime(text){
+        return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(text || '').trim());
+      }
+
+      function normalizeHistoryRecord(raw){
+        const item = raw || {};
+        const triggerRaw = String(item.trigger || '').trim().toLowerCase();
+        const fromTaskId = String(item.task_id || '').startsWith('auto_');
+        const trigger = triggerRaw === 'schedule' || fromTaskId ? 'schedule' : 'manual';
+        return {
+          ...item,
+          trigger,
+          schedule_name: String(item.schedule_name || ''),
+          added_torrents: Array.isArray(item.added_torrents) ? item.added_torrents : [],
+          skipped_torrents: Array.isArray(item.skipped_torrents) ? item.skipped_torrents : [],
+          failed_torrents: Array.isArray(item.failed_torrents) ? item.failed_torrents : [],
+        };
+      }
+
       function syncTaskMode(){
         const found = enabledModes.value.find(x => x.mode === taskForm.mode);
         if(!found){
           taskForm.mode = enabledModes.value.length ? enabledModes.value[0].mode : '';
         }
+      }
+
+      function syncScheduleModes(){
+        const modeSet = new Set(Object.keys(config.rss_modes || {}));
+        config.schedules = (config.schedules || []).filter(item => modeSet.has(String(item.mode || '')));
       }
 
       function normalizeConfig(input){
@@ -424,6 +597,15 @@
             enabled: Number(m.enabled) === 1 ? 1 : 0,
           };
         });
+        config.schedules = (Array.isArray(c.schedules) ? c.schedules : []).map((raw)=>({
+          id: Number(raw?.id || 0),
+          schedule_name: String(raw?.schedule_name || raw?.mode || ''),
+          mode: String(raw?.mode || ''),
+          run_time: String(raw?.run_time || '03:30'),
+          keywords_text: Array.isArray(raw?.keywords) ? raw.keywords.join(' ') : String(raw?.keywords || ''),
+          enabled: Number(raw?.enabled) === 1 ? 1 : 0,
+        }));
+        syncScheduleModes();
         syncTaskMode();
       }
 
@@ -465,7 +647,62 @@
 
       function removeMode(mode){
         delete config.rss_modes[mode];
+        const beforeCount = (config.schedules || []).length;
+        config.schedules = (config.schedules || []).filter(item => item.mode !== mode);
+        const removed = beforeCount - config.schedules.length;
+        if(removed > 0){
+          ElementPlus.ElMessage.info(`已同步删除 ${removed} 条关联自动下载计划`);
+        }
         syncTaskMode();
+      }
+
+      function openAddScheduleDialog(){
+        if(!allModes.value.length){
+          ElementPlus.ElMessage.warning('请先配置至少一个 RSS 类型');
+          return;
+        }
+        newSchedule.schedule_name = '';
+        newSchedule.mode = allModes.value[0].mode;
+        newSchedule.run_time = '03:30';
+        newSchedule.keywords_text = '';
+        newSchedule.enabled = 1;
+        addScheduleVisible.value = true;
+      }
+
+      function confirmAddSchedule(){
+        const mode = String(newSchedule.mode || '').trim();
+        if(!mode){
+          ElementPlus.ElMessage.warning('请选择 RSS 类型');
+          return;
+        }
+        if(!isValidRunTime(newSchedule.run_time)){
+          ElementPlus.ElMessage.warning('执行时间格式无效，请使用 HH:MM');
+          return;
+        }
+        const scheduleName = String(newSchedule.schedule_name || '').trim() || `每日-${mode}`;
+        config.schedules.unshift({
+          id: 0,
+          schedule_name: scheduleName,
+          mode,
+          run_time: String(newSchedule.run_time || '').trim(),
+          keywords_text: String(newSchedule.keywords_text || '').trim(),
+          enabled: Number(newSchedule.enabled) === 1 ? 1 : 0,
+        });
+        addScheduleVisible.value = false;
+        ElementPlus.ElMessage.success(`已新增自动计划：${scheduleName}`);
+      }
+
+      async function removeScheduleConfirm(index){
+        try{
+          await ElementPlus.ElMessageBox.confirm('确认删除这条自动下载计划吗？', '删除确认', {
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+            type: 'warning'
+          });
+        }catch(_e){
+          return;
+        }
+        config.schedules.splice(index, 1);
       }
 
       async function removeModeConfirm(mode){
@@ -508,12 +745,33 @@
       }
 
       async function saveConfig(){
+        for(const row of (config.schedules || [])){
+          if(!String(row.mode || '').trim()){
+            ElementPlus.ElMessage.warning('自动下载计划存在空模式，请检查');
+            return;
+          }
+          if(!isValidRunTime(row.run_time)){
+            ElementPlus.ElMessage.warning(`计划「${row.schedule_name || row.mode}」执行时间格式无效`);
+            return;
+          }
+        }
+
+        const schedulesPayload = (config.schedules || []).map((row)=>({
+          schedule_name: String(row.schedule_name || row.mode || '').trim() || String(row.mode || ''),
+          mode: String(row.mode || '').trim(),
+          run_time: String(row.run_time || '').trim(),
+          keywords: parseKeywordsText(row.keywords_text),
+          enabled: Number(row.enabled) === 1 ? 1 : 0,
+        }));
+
         saving.value = true;
         const payload = {
           tenant_name: config.tenant_name,
           transmission: { ...config.transmission },
           rss_modes: config.rss_modes,
           rss_modes_replace: true,
+          schedules: schedulesPayload,
+          schedules_replace: true,
         };
         const d = await api('/api/user/config', {
           method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
@@ -664,7 +922,13 @@
 
       async function loadHistory(){
         const d = await api('/api/user/history?limit=30');
-        history.value = d.history || [];
+        history.value = (d.history || []).map(normalizeHistoryRecord);
+      }
+
+      function openHistoryDetail(row){
+        historyDetail.value = normalizeHistoryRecord(row || {});
+        historyDetailTab.value = 'added';
+        historyDetailVisible.value = true;
       }
 
       async function refreshAll(){
@@ -699,6 +963,7 @@
         config,
         newMode,
         enabledModes,
+        allModes,
         rssModeCards,
         transmissionStatusLabel,
         transmissionConnected,
@@ -710,7 +975,11 @@
         testingTransmission,
         changingPassword,
         addModeVisible,
+        addScheduleVisible,
         passwordDialogVisible,
+        historyDetailVisible,
+        historyDetailTab,
+        historyDetail,
         refreshAll,
         logout,
         preview,
@@ -721,10 +990,15 @@
         changePassword,
         openAddModeDialog,
         confirmAddMode,
+        openAddScheduleDialog,
+        confirmAddSchedule,
+        removeScheduleConfirm,
         removeModeConfirm,
         removeMode,
         testTransmission,
         downloadOne,
+        newSchedule,
+        openHistoryDetail,
       };
     }
   }).use(ElementPlus).mount('#app');
