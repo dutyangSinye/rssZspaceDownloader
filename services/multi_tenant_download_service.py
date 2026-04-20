@@ -1,7 +1,9 @@
 ﻿import time
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
+from uuid import uuid4
 
 import requests
 
@@ -37,6 +39,93 @@ class MultiTenantDownloadService:
     def __init__(self, tenant_store: TenantStore):
         self.tenant_store = tenant_store
         self.rss_parser = RSSParser()
+
+    @staticmethod
+    def _normalize_torrent_name(name: str) -> str:
+        return re.sub(r"\s+", " ", str(name or "").strip()).lower()
+
+    @staticmethod
+    def _extract_media_code(name: str) -> str:
+        match = re.search(r"[A-Za-z]{2,10}-\d{2,6}", str(name or ""))
+        return match.group(0).upper() if match else ""
+
+    def _confirm_qb_added(
+        self,
+        downloader_client,
+        title: str,
+        known_names: set,
+        max_checks: int = 8,
+        delay_seconds: float = 1.2,
+    ) -> bool:
+        target_name = self._normalize_torrent_name(title)
+        target_code = self._extract_media_code(title)
+        baseline = {self._normalize_torrent_name(x) for x in (known_names or set()) if str(x or "").strip()}
+
+        for idx in range(max_checks):
+            current_raw = downloader_client.get_torrent_names() or set()
+            current = {self._normalize_torrent_name(x) for x in current_raw if str(x or "").strip()}
+            new_names = current - baseline
+
+            if target_name and target_name in new_names:
+                return True
+            if target_code and any(target_code in str(name or "").upper() for name in new_names):
+                return True
+            # Some trackers expose localized RSS titles while qB stores original names.
+            # If code is unavailable, treat any new queue item as a successful enqueue.
+            if not target_code and new_names:
+                return True
+            if not target_name and not target_code and new_names:
+                return True
+
+            if idx < max_checks - 1:
+                time.sleep(delay_seconds)
+
+        return False
+
+    def _add_torrent_with_qb_retry(
+        self,
+        downloader_client,
+        downloader_type: str,
+        title: str,
+        enclosure_url: str,
+        download_dir: str,
+        known_names: set,
+        max_attempts: int = 2,
+    ) -> str:
+        if downloader_type != "qbittorrent":
+            return downloader_client.add_torrent(enclosure_url, download_dir).get("result")
+
+        baseline = {self._normalize_torrent_name(x) for x in (known_names or set()) if str(x or "").strip()}
+        attempts = max(1, int(max_attempts))
+        last_result = ""
+        for attempt in range(1, attempts + 1):
+            last_result = downloader_client.add_torrent(enclosure_url, download_dir).get("result") or ""
+            if last_result == "torrent-duplicate":
+                return "success" if attempt > 1 else "torrent-duplicate"
+            if last_result != "success":
+                return last_result
+
+            if self._confirm_qb_added(downloader_client, title or "", baseline):
+                return "success"
+
+            logger.warning(
+                "qB add success but not confirmed in queue, retrying (%s/%s), title=%s",
+                attempt,
+                attempts,
+                (title or "")[:120],
+            )
+            if attempt >= attempts:
+                return "qb-unconfirmed"
+
+            current_names = {
+                self._normalize_torrent_name(name)
+                for name in (downloader_client.get_torrent_names() or set())
+                if str(name or "").strip()
+            }
+            baseline |= current_names
+            time.sleep(1.0)
+
+        return last_result or "qb-unconfirmed"
 
     @staticmethod
     def _pick_downloader(config: Dict, downloader_id: Optional[str] = None) -> Dict:
@@ -137,13 +226,70 @@ class MultiTenantDownloadService:
         if not mode_cfg:
             return {"success": False, "message": "无效模式"}
 
-        transmission = self._tenant_client(tenant_key, downloader_id=downloader_id)
-        result = transmission.add_torrent(url, mode_cfg.get("download_dir", "/downloads"))
-        rpc_result = result.get("result")
+        selected_downloader = self._pick_downloader(config, downloader_id=downloader_id)
+        downloader_type = str((selected_downloader or {}).get("backend_type") or "").strip().lower()
+        transmission = create_downloader_client(selected_downloader)
+        task_id = f"single_{tenant_key}_{int(time.time())}_{uuid4().hex[:8]}"
+        title_text = str(title or "").strip() or str(url or "").strip() or "未命名种子"
+        started_at = time.time()
+
+        def save_single_history(added: List[str], skipped: List[str], failed: List[Dict], success: bool):
+            payload = {
+                "task_id": task_id,
+                "tenant_key": tenant_key,
+                "mode": mode,
+                "mode_name": mode_cfg.get("mode_name", mode),
+                "trigger": "manual",
+                "schedule_name": "",
+                "downloader_id": str((selected_downloader or {}).get("id") or ""),
+                "downloader_name": str((selected_downloader or {}).get("name") or ""),
+                "downloader_type": str((selected_downloader or {}).get("backend_type") or ""),
+                "success": bool(success),
+                "statistics": {
+                    "total": 1,
+                    "added_count": len(added),
+                    "skipped_count": len(skipped),
+                    "failed_count": len(failed),
+                },
+                "added_torrents": added,
+                "skipped_torrents": skipped,
+                "failed_torrents": failed,
+                "duration_seconds": round(time.time() - started_at, 1),
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            self.tenant_store.save_history(tenant_key, task_id, payload)
+
+        existing_names = set()
+        if downloader_type == "qbittorrent":
+            existing_names = {
+                self._normalize_torrent_name(name)
+                for name in (transmission.get_torrent_names() or set())
+                if str(name or "").strip()
+            }
+            title_norm = self._normalize_torrent_name(title)
+            if title_norm and title_norm in existing_names:
+                self.tenant_store.remember_downloaded(tenant_key, title_text, url)
+                save_single_history(added=[], skipped=[title_text], failed=[], success=True)
+                return {"success": True, "message": "已存在"}
+        rpc_result = self._add_torrent_with_qb_retry(
+            downloader_client=transmission,
+            downloader_type=downloader_type,
+            title=title,
+            enclosure_url=url,
+            download_dir=mode_cfg.get("download_dir", "/downloads"),
+            known_names=existing_names,
+        )
         if rpc_result in {"success", "torrent-duplicate"}:
-            self.tenant_store.remember_downloaded(tenant_key, title or url, url)
+            self.tenant_store.remember_downloaded(tenant_key, title_text, url)
+            if rpc_result == "success":
+                save_single_history(added=[title_text], skipped=[], failed=[], success=True)
+            else:
+                save_single_history(added=[], skipped=[title_text], failed=[], success=True)
             return {"success": True, "message": "添加成功" if rpc_result == "success" else "已存在"}
-        return {"success": False, "message": rpc_result or "添加失败"}
+
+        error_message = "qB 返回成功但未确认任务入列（已自动重试1次）" if rpc_result == "qb-unconfirmed" else (rpc_result or "添加失败")
+        save_single_history(added=[], skipped=[], failed=[{"title": title_text, "error": error_message}], success=False)
+        return {"success": False, "message": error_message}
 
     def execute_download(
         self,
@@ -180,7 +326,12 @@ class MultiTenantDownloadService:
             if not items:
                 raise ValueError("过滤后无匹配条目")
 
-        existing_names = transmission.get_torrent_names()
+        downloader_type = str((selected_downloader or {}).get("backend_type") or "").strip().lower()
+        existing_names = {
+            self._normalize_torrent_name(name)
+            for name in (transmission.get_torrent_names() or set())
+            if str(name or "").strip()
+        }
         added: List[str] = []
         skipped: List[str] = []
         failed: List[Dict] = []
@@ -197,28 +348,60 @@ class MultiTenantDownloadService:
                 continue
             in_batch_urls.add(url)
 
-            if self.tenant_store.is_downloaded(tenant_key, title, url):
+            # Refresh qB baseline per item to avoid stale baseline causing false confirmation.
+            if downloader_type == "qbittorrent":
+                existing_names = {
+                    self._normalize_torrent_name(name)
+                    for name in (transmission.get_torrent_names() or set())
+                    if str(name or "").strip()
+                }
+
+            if downloader_type != "qbittorrent" and self.tenant_store.is_downloaded(tenant_key, title, url):
                 skipped.append(title)
                 if progress_callback:
                     progress_callback(self._build_progress(idx, total, added, skipped, failed, title))
                 continue
 
-            title_lower = title.lower()
-            if any(title_lower == name or title_lower in name or name in title_lower for name in existing_names):
+            title_norm = self._normalize_torrent_name(title)
+            if title_norm and title_norm in existing_names:
                 skipped.append(title)
-                self.tenant_store.remember_downloaded(tenant_key, title, url)
                 if progress_callback:
                     progress_callback(self._build_progress(idx, total, added, skipped, failed, title))
                 continue
 
             try:
-                rpc_result = transmission.add_torrent(url, mode_cfg.get("download_dir", "/downloads")).get("result")
+                rpc_result = self._add_torrent_with_qb_retry(
+                    downloader_client=transmission,
+                    downloader_type=downloader_type,
+                    title=title,
+                    enclosure_url=url,
+                    download_dir=mode_cfg.get("download_dir", "/downloads"),
+                    known_names=existing_names,
+                )
                 if rpc_result == "success":
                     added.append(title)
                     self.tenant_store.remember_downloaded(tenant_key, title, url)
+                    if title_norm:
+                        existing_names.add(title_norm)
+                    if downloader_type == "qbittorrent":
+                        existing_names |= {
+                            self._normalize_torrent_name(name)
+                            for name in (transmission.get_torrent_names() or set())
+                            if str(name or "").strip()
+                        }
                 elif rpc_result == "torrent-duplicate":
                     skipped.append(title)
                     self.tenant_store.remember_downloaded(tenant_key, title, url)
+                    if title_norm:
+                        existing_names.add(title_norm)
+                    if downloader_type == "qbittorrent":
+                        existing_names |= {
+                            self._normalize_torrent_name(name)
+                            for name in (transmission.get_torrent_names() or set())
+                            if str(name or "").strip()
+                        }
+                elif rpc_result == "qb-unconfirmed":
+                    failed.append({"title": title, "error": "qB 返回成功但未确认任务入列（已自动重试1次）"})
                 else:
                     failed.append({"title": title, "error": rpc_result or "未知错误"})
             except Exception as exc:
@@ -273,3 +456,4 @@ class MultiTenantDownloadService:
             "failed": len(failed),
             "message": f"[{current}/{total}] {current_title[:60]}",
         }
+

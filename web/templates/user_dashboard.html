@@ -1431,6 +1431,7 @@
         }
 
         const schedulesPayload = (config.schedules || []).map((row)=>({
+          id: Number(row.id || 0),
           schedule_name: String(row.schedule_name || row.mode || '').trim() || String(row.mode || ''),
           mode: String(row.mode || '').trim(),
           downloader_id: String(row.downloader_id || '').trim(),

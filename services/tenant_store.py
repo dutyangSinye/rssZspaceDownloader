@@ -1107,6 +1107,42 @@ class TenantStore:
             schedules_replace = bool(payload.get("schedules_replace")) and schedules_touched
             normalized_schedules: List[Dict[str, Any]] = []
             if schedules_touched:
+                def schedule_signature(schedule_name: str, mode: str, downloader_id: str, run_time: str, keywords_json: str) -> str:
+                    return "||".join(
+                        [
+                            str(schedule_name or "").strip(),
+                            str(mode or "").strip().lower(),
+                            str(downloader_id or "").strip(),
+                            str(run_time or "").strip(),
+                            str(keywords_json or "[]").strip(),
+                        ]
+                    )
+
+                existing_schedule_rows = conn.execute(
+                    """
+                    SELECT id, schedule_name, mode, downloader_id, run_time, keywords_json, last_run_date
+                    FROM tenant_download_schedules
+                    WHERE tenant_id = ?
+                    """,
+                    (tenant_id,),
+                ).fetchall()
+                existing_schedule_by_id: Dict[int, Dict[str, Any]] = {}
+                existing_last_run_by_signature: Dict[str, str] = {}
+                for row in existing_schedule_rows:
+                    sid = int(row["id"] or 0)
+                    signature = schedule_signature(
+                        str(row["schedule_name"] or ""),
+                        str(row["mode"] or ""),
+                        str(row["downloader_id"] or ""),
+                        str(row["run_time"] or ""),
+                        str(row["keywords_json"] or "[]"),
+                    )
+                    last_run_date = str(row["last_run_date"] or "")
+                    if sid > 0:
+                        existing_schedule_by_id[sid] = {"signature": signature, "last_run_date": last_run_date}
+                    if signature and last_run_date:
+                        existing_last_run_by_signature[signature] = last_run_date
+
                 mode_rows = conn.execute(
                     "SELECT mode FROM tenant_rss_modes WHERE tenant_id = ?",
                     (tenant_id,),
@@ -1129,15 +1165,26 @@ class TenantStore:
                     run_time = self._normalize_schedule_time(raw.get("run_time"))
                     keywords = self._normalize_schedule_keywords(raw.get("keywords"))
                     schedule_name = str(raw.get("schedule_name") or mode_key).strip() or mode_key
+                    schedule_id = int(raw.get("id") or 0)
+                    keywords_json = json.dumps(keywords, ensure_ascii=False)
+                    signature = schedule_signature(schedule_name[:80], mode_key, schedule_downloader_id, run_time, keywords_json)
+                    keep_last_run_date = ""
+                    existing_by_id = existing_schedule_by_id.get(schedule_id)
+                    if existing_by_id and existing_by_id.get("signature") == signature:
+                        keep_last_run_date = str(existing_by_id.get("last_run_date") or "")
+                    elif signature in existing_last_run_by_signature:
+                        keep_last_run_date = str(existing_last_run_by_signature.get(signature) or "")
                     normalized_schedules.append(
                         {
+                            "id": schedule_id,
                             "schedule_name": schedule_name[:80],
                             "mode": mode_key,
                             "downloader_id": schedule_downloader_id,
-                            "keywords_json": json.dumps(keywords, ensure_ascii=False),
+                            "keywords_json": keywords_json,
                             "run_time": run_time,
                             "timezone": DEFAULT_SCHEDULE_TZ,
                             "enabled": 1 if int(raw.get("enabled", 1)) == 1 else 0,
+                            "last_run_date": keep_last_run_date,
                         }
                     )
 
@@ -1149,7 +1196,7 @@ class TenantStore:
                         """
                         INSERT INTO tenant_download_schedules(
                             tenant_id, schedule_name, mode, downloader_id, keywords_json, run_time, timezone, enabled, last_run_date, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             tenant_id,
@@ -1160,6 +1207,7 @@ class TenantStore:
                             schedule["run_time"],
                             schedule["timezone"],
                             schedule["enabled"],
+                            schedule.get("last_run_date", ""),
                             self._now(),
                             self._now(),
                         ),
